@@ -1,0 +1,498 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon Connect Instance with Customer Profiles and Q in Connect Assistant'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Connect Instance Configuration"
+        Parameters:
+          - CreateNewInstance
+          - InstanceAlias
+          - ExistingInstanceId
+      - Label:
+          default: "Q in Connect Configuration"
+        Parameters:
+          - EnableQinConnect
+    ParameterLabels:
+      EnableQinConnect:
+        default: "Enable Q in Connect Assistant"
+
+Parameters:
+  CreateNewInstance:
+    Type: String
+    Description: 'Create a new Connect instance?'
+    AllowedValues: 
+      - 'Yes'
+      - 'No'
+    Default: 'Yes'
+
+  InstanceAlias:
+    Type: String
+    Description: 'The instance alias for the Amazon Connect instance. Use only lowercase letters, numbers, and hyphens.'
+    MaxLength: 64
+    AllowedPattern: '^[a-z0-9-]+$'
+    ConstraintDescription: 'Instance alias can only contain lowercase letters, numbers, and hyphens.'
+
+  ExistingInstanceId:
+    Type: String
+    Description: 'Existing Connect instance ID (required if not creating a new Amazon Connect instance)'
+    Default: ''
+
+  EnableQinConnect:
+    Type: String
+    AllowedValues: 
+      - 'Yes'
+      - 'No'
+    Default: 'Yes'
+    Description: 'Enable or disable Q in Connect Assistant creation. If you select No, you will need to use an existing QiC domain or create a QiC domain manually.'
+
+Rules:
+  ValidateInstanceAlias:
+    RuleCondition: !Equals 
+      - !Ref CreateNewInstance
+      - 'Yes'
+    Assertions:
+      - Assert: !Not [!Equals [!Ref InstanceAlias, '']]
+        AssertDescription: InstanceAlias must be provided when creating a new instance
+
+  ValidateExistingInstanceId:
+    RuleCondition: !Equals 
+      - !Ref CreateNewInstance
+      - 'No'
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExistingInstanceId, '']]
+        AssertDescription: ExistingInstanceId must be provided when not creating a new instance
+
+Conditions:
+  ShouldCreateNewInstance: !Equals 
+    - !Ref CreateNewInstance
+    - 'Yes'
+  CreateAssistantResources: !Equals 
+    - !Ref EnableQinConnect
+    - 'Yes'
+
+Resources:
+  # ロギング用バケット
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'amazonconnect-${InstanceAlias}-logs'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  # Amazon Connect 用のS3バケット作成
+  ConnectS3Bucket:
+    Type: AWS::S3::Bucket
+    Condition: ShouldCreateNewInstance
+    Properties:
+      BucketName: !Sub 'amazonconnect-${InstanceAlias}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LoggingBucket
+        LogFilePrefix: connect-bucket-logs/
+      Tags:
+        - Key: Purpose
+          Value: ConnectRecordings
+
+  # Amazon Connect Package用のS3バケット作成
+  ConnectS3BucketApp:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'amazonconnect-${InstanceAlias}-app'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LoggingBucket
+        LogFilePrefix: connect-app-bucket-logs/
+      Tags:
+        - Key: Purpose
+          Value: ConnectPackage
+
+  # Amazon Q in Conncect ナレッジソース用のS3バケット作成
+  ConnectS3BucketQiC:
+    Type: AWS::S3::Bucket
+    Condition: CreateAssistantResources
+    Properties:
+      BucketName: !Sub 'amazonconnect-${InstanceAlias}-qic'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LoggingBucket
+        LogFilePrefix: connect-qic-bucket-logs/
+      Tags:
+        - Key: Purpose
+          Value: Amazon Q in Connect Knowledge Source
+
+  # ロギング用バケットのポリシー
+  LoggingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LoggingBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowS3LogDelivery
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: 
+              - s3:PutObject
+            Resource: !Sub 'arn:aws:s3:::${LoggingBucket}/*'
+          - Sid: AllowCloudFrontLogDelivery
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:PutObject'
+            Resource: !Sub "${LoggingBucket.Arn}/*"
+
+  # AmazonConnect用バケットのポリシー
+  ConnectS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: ShouldCreateNewInstance
+    DependsOn:
+      - ConnectS3Bucket
+    Properties:
+      Bucket: !Ref ConnectS3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowConnectAccess
+            Effect: Allow
+            Principal:
+              Service: connect.amazonaws.com
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+            Resource: !Sub '${ConnectS3Bucket.Arn}/*'
+            Condition:
+              StringEquals:
+               aws:SourceAccount: !Ref 'AWS::AccountId'
+
+  # Amazon Connect Package用バケットのポリシー
+  ConnectS3BucketAppPolicy:
+    Type: AWS::S3::BucketPolicy
+    DependsOn:
+      - ConnectS3BucketApp
+    Properties:
+      Bucket: !Ref ConnectS3BucketApp
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontAccess
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub '${ConnectS3BucketApp.Arn}/*'
+
+  # QiC用S3バケットへのポリシー追加
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreateAssistantResources
+    DependsOn:
+      - ConnectS3BucketQiC
+    Properties:
+      Bucket: !Ref ConnectS3BucketQiC
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAppIntegrationsDataIntegrations
+            Effect: Allow
+            Principal:
+              Service: app-integrations.amazonaws.com
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub 'arn:aws:s3:::${ConnectS3BucketQiC}'
+              - !Sub 'arn:aws:s3:::${ConnectS3BucketQiC}/*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+              ArnEquals:
+                aws:SourceArn: !Sub 'arn:aws:app-integrations:${AWS::Region}:${AWS::AccountId}:data-integration/*'
+
+  # 統合されたKMSキー
+  ConnectKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: 'KMS key for Amazon Connect Services'
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: 'connect-key-policy'
+        Statement:
+          - Sid: 'Enable IAM User Permissions'
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: 'Allow Connect Services'
+            Effect: Allow
+            Principal:
+              Service: 
+                - 'connect.amazonaws.com'
+                - 'profile.amazonaws.com'
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+          - Sid: 'Allow S3 Service'
+            Effect: Allow
+            Principal:
+              Service: 's3.amazonaws.com'
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+          - Sid: 'Allow Connect Call Recording'
+            Effect: Allow
+            Principal:
+              Service: 'connect.amazonaws.com'
+            Action:
+              - 'kms:CreateGrant'
+              - 'kms:Decrypt'
+              - 'kms:DescribeKey'
+              - 'kms:Encrypt'
+              - 'kms:GenerateDataKey'
+              - 'kms:GenerateDataKeyPair'
+              - 'kms:GenerateDataKeyPairWithoutPlaintext'
+              - 'kms:GenerateDataKeyWithoutPlaintext'
+              - 'kms:ReEncryptFrom'
+              - 'kms:ReEncryptTo'
+            Resource: '*'
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      Tags:
+        - Key: Purpose
+          Value: ConnectServices
+
+  ConnectKMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-connect'
+      TargetKeyId: !Ref ConnectKMSKey
+
+  ConnectInstance:
+    Type: AWS::Connect::Instance
+    Condition: ShouldCreateNewInstance
+    Properties:
+      Attributes: 
+        AutoResolveBestVoices: true
+        ContactLens: true
+        ContactflowLogs: true
+        EarlyMedia: true
+        InboundCalls: true
+        OutboundCalls: true
+        UseCustomTTSVoices: false
+      IdentityManagementType: CONNECT_MANAGED
+      InstanceAlias: !Ref InstanceAlias
+      ServiceRole: !Sub 'aws-service-role/connect.amazonaws.com/AWSServiceRoleForAmazonConnect'
+
+  ConnectPhoneNumber:
+    Type: AWS::Connect::PhoneNumber
+    Condition: ShouldCreateNewInstance
+    DependsOn:
+      - ConnectInstance
+    Properties:
+      CountryCode: US
+      Type: DID
+      TargetArn: !GetAtt ConnectInstance.Arn
+      Description: "A US phone number for testing"
+
+  # Amazon Connect で録音を有効化
+  ConnectInstanceStorageConfig:
+    Type: AWS::Connect::InstanceStorageConfig
+    Condition: ShouldCreateNewInstance
+    DependsOn: 
+      - ConnectInstance
+      - ConnectS3Bucket
+    Properties:
+      InstanceArn: !GetAtt ConnectInstance.Arn
+      ResourceType: CALL_RECORDINGS
+      StorageType: S3
+      S3Config:
+        BucketName: !Ref ConnectS3Bucket
+        BucketPrefix: "CallRecordings"
+        EncryptionConfig:
+          EncryptionType: KMS
+          KeyId: !GetAtt ConnectKMSKey.Arn
+
+  # Customer Profiles Resources
+  CustomerProfiles:
+    Type: AWS::CustomerProfiles::Domain
+    Properties:
+      DomainName: !If 
+        - ShouldCreateNewInstance
+        - !Sub '${InstanceAlias}-domain'
+        - !Sub '${ExistingInstanceId}-domain'
+      DefaultEncryptionKey: !GetAtt ConnectKMSKey.Arn
+      DefaultExpirationDays: 730
+      Tags: 
+        - Key: "Environment"
+          Value: "Production"
+
+  # Q in Connect Resources
+  DataIntegration:
+    Type: 'AWS::AppIntegrations::DataIntegration'
+    Condition: CreateAssistantResources
+    DependsOn:
+      - CustomerProfiles
+    Properties:
+      Name: !Sub 'qic-amazonconnect-${InstanceAlias}'
+      KmsKey: !GetAtt ConnectKMSKey.Arn
+      SourceURI: !Sub 's3://${ConnectS3BucketQiC}'
+
+  KnowledgeBase:
+    Type: 'AWS::Wisdom::KnowledgeBase'
+    Condition: CreateAssistantResources
+    DependsOn: 
+      - DataIntegration
+      - CustomerProfiles
+    Properties:
+      Name: !Sub 'qic-amazonconnect-${InstanceAlias}'
+      KnowledgeBaseType: EXTERNAL
+      Tags:
+        - Key: AmazonConnectEnabled
+          Value: "True"
+      ServerSideEncryptionConfiguration:
+        KmsKeyId: !GetAtt ConnectKMSKey.Arn
+      SourceConfiguration:
+        AppIntegrations:
+          AppIntegrationArn: !GetAtt DataIntegration.DataIntegrationArn
+
+  Assistant:
+    Type: 'AWS::Wisdom::Assistant'
+    Condition: CreateAssistantResources
+    DependsOn:
+      - CustomerProfiles
+    Properties:
+      Name: !Sub 'qic-amazonconnect-${InstanceAlias}'
+      Type: AGENT
+      Description: 'Q in Connect Assistant created via CloudFormation'
+
+  AssistantAssociation:
+    Type: 'AWS::Wisdom::AssistantAssociation'
+    Condition: CreateAssistantResources
+    Properties:
+      AssistantId: !Ref Assistant
+      AssociationType: KNOWLEDGE_BASE
+      Association:
+        KnowledgeBaseId: !Ref KnowledgeBase
+    DependsOn:
+      - KnowledgeBase
+      - Assistant
+
+Outputs:
+  ConnectInstanceArn:
+    Description: The ARN of the Amazon Connect instance
+    Value: !If 
+      - ShouldCreateNewInstance
+      - !GetAtt ConnectInstance.Arn
+      - !Sub 'arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/${ExistingInstanceId}'
+
+  CustomerProfilesDomainName:
+    Description: The name of the Customer Profiles domain
+    Value: !Ref CustomerProfiles
+
+  AssistantId:
+    Condition: CreateAssistantResources
+    Description: 'ID of the created Q in Connect Assistant'
+    Value: !Ref Assistant
+  
+  AssistantArn:
+    Condition: CreateAssistantResources
+    Description: 'ARN of the created Q in Connect Assistant'
+    Value: !GetAtt Assistant.AssistantArn
+  
+  AssistantAssociationId:
+    Condition: CreateAssistantResources
+    Description: 'ID of the created Assistant Association'
+    Value: !Ref AssistantAssociation
+  
+  KnowledgeBaseId:
+    Condition: CreateAssistantResources
+    Description: 'ID of the created Knowledge Base'
+    Value: !Ref KnowledgeBase
+  
+  DataIntegrationArn:
+    Condition: CreateAssistantResources
+    Description: 'ARN of the created Data Integration'
+    Value: !GetAtt DataIntegration.DataIntegrationArn
+  
+  KMSKeyId:
+    Description: 'ID of the KMS key'
+    Value: !Ref ConnectKMSKey
+  
+  KMSKeyArn:
+    Description: 'ARN of the KMS key'
+    Value: !GetAtt ConnectKMSKey.Arn
+
+  QiCBucketPolicyArn:
+    Condition: CreateAssistantResources
+    Description: 'ARN of the bucket policy'
+    Value: !Sub 'arn:aws:s3:::${ConnectS3BucketQiC}/policy'
+
+  PhoneNumber:
+    Condition: ShouldCreateNewInstance
+    Description: 'The phone number, in E.164 format.'
+    Value: !GetAtt ConnectPhoneNumber.Address
+
+  ConnectS3BucketName:
+    Condition: ShouldCreateNewInstance
+    Description: 'Name of the S3 bucket for Connect recordings'
+    Value: !Ref ConnectS3Bucket
+
+  ConnectAppS3BucketName:
+    Description: 'Name of the S3 bucket for Connect Package'
+    Value: !Ref ConnectS3BucketApp
+
+  ConnectQiCS3BucketName:
+    Condition: CreateAssistantResources
+    Description: 'Name of the S3 bucket for Q in Connect'
+    Value: !Ref ConnectS3BucketQiC

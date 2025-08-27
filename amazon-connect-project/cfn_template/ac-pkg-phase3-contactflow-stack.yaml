@@ -1,0 +1,525 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for importing Contact Flow to Amazon Connect'
+
+# タグの定義
+Mappings:
+  DeploymentTags:
+    Tags:
+      DeploymentInfo: "AmazonConnectPackage_v202506"
+
+Parameters:
+  AwsAccountId:
+    Type: String
+    Description: 'AWS Account ID'
+
+  ConnectInstanceArn:
+    Type: String
+    Description: 'ARN of the Amazon Connect instance'
+
+  QiCDomainArn:
+    Type: String
+    Description: 'ARN of the QiC'
+
+  CaseTemplateName:
+    Type: String
+    Description: 'Name of the case template'
+
+  CaseTemplateId:
+    Type: String
+    Description: 'ID of the case template'
+
+  LexBotName:
+    Type: String
+    Description: 'Name of the Lex Bot'
+
+  LexBotId:
+    Type: String
+    Description: 'ID of the Lex Bot'
+
+  FlowNamePrefix:
+    Type: String
+    Description: 'Prefix for flow names'
+
+Resources:
+  # KMSキーの作成
+  DLQueueKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: 'KMS key for DLQ encryption'
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow Lambda to use the key
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: '*'
+
+  # KMSキーのエイリアス
+  DLQueueKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-dlq-key'
+      TargetKeyId: !Ref DLQueueKey
+
+  # DLQ用のSQSキュー
+  DLQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600  # 14 days
+      KmsMasterKeyId: !GetAtt DLQueueKey.Arn
+      SqsManagedSseEnabled: false  # KMSを使用する場合はfalseに設定
+
+  # Lambda実行用のIAMロール
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ConnectAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ListConnectInstanceResources
+                Effect: Allow
+                Action:
+                  - connect:ListQueues
+                  - connect:ListPrompts
+                  - connect:ListHoursOfOperations
+                Resource: !Sub 'arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/*'
+              - Sid: AccessConnectQueues
+                Effect: Allow
+                Action:
+                  - connect:DescribeQueue
+                Resource:
+                  - !Sub '${ConnectInstanceArn}/queue/*'
+              - Sid: AccessConnectPrompts
+                Effect: Allow
+                Action:
+                  - connect:DescribePrompt
+                Resource:
+                  - !Sub '${ConnectInstanceArn}/prompt/*'
+              - Sid: AccessConnectHoursOfOperation
+                Effect: Allow
+                Action:
+                  - connect:DescribeHoursOfOperation
+                Resource:
+                  - !Sub '${ConnectInstanceArn}/operating-hours/*'
+              - Sid: AllowSTSGetCallerIdentity
+                Effect: Allow
+                Action: sts:GetCallerIdentity
+                Resource: !Sub 'arn:aws:sts::${AWS::AccountId}:user/*'
+        - PolicyName: DLQAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt DLQueue.Arn
+        - PolicyName: KMSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !GetAtt DLQueueKey.Arn               
+
+  # リソースID取得用のLambda関数
+  ResourceLookupFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import cfnresponse
+
+          def find_queue_by_name(connect, instance_id, queue_name):
+              try:
+                  response = connect.list_queues(
+                      InstanceId=instance_id,
+                      QueueTypes=['STANDARD']
+                  )
+                  print(f"Queues response: {json.dumps(response, default=str)}")
+                  
+                  # AWSアカウントIDとリージョンを取得（ARN構築用）
+                  sts = boto3.client('sts')
+                  account_id = sts.get_caller_identity()['Account']
+                  region = connect.meta.region_name
+                  
+                  for queue in response['QueueSummaryList']:
+                      if queue['Name'] == queue_name:
+                          # 完全なARNを返す
+                          return f"arn:aws:connect:{region}:{account_id}:instance/{instance_id}/queue/{queue['Id']}"
+                  return None
+              except Exception as e:
+                  print(f"Error finding queue: {str(e)}")
+                  raise
+
+          def find_prompt_by_name(connect, instance_id, prompt_name):
+              try:
+                  response = connect.list_prompts(
+                      InstanceId=instance_id,
+                      MaxResults=100
+                  )
+                  print(f"Prompts response: {json.dumps(response, default=str)}")
+                  
+                  # AWSアカウントIDとリージョンを取得
+                  sts = boto3.client('sts')
+                  account_id = sts.get_caller_identity()['Account']
+                  region = connect.meta.region_name
+                  
+                  for prompt in response['PromptSummaryList']:
+                      if prompt['Name'] == prompt_name:
+                          return f"arn:aws:connect:{region}:{account_id}:instance/{instance_id}/prompt/{prompt['Id']}"
+                  return None
+              except Exception as e:
+                  print(f"Error finding prompt: {str(e)}")
+                  raise
+
+          def find_hours_by_name(connect, instance_id, hours_name):
+              try:
+                  response = connect.list_hours_of_operations(
+                      InstanceId=instance_id,
+                      MaxResults=100
+                  )
+                  print(f"Hours of Operation response: {json.dumps(response, default=str)}")
+                  
+                  # AWSアカウントIDとリージョンを取得
+                  sts = boto3.client('sts')
+                  account_id = sts.get_caller_identity()['Account']
+                  region = connect.meta.region_name
+                  
+                  for hours in response['HoursOfOperationSummaryList']:
+                      if hours['Name'] == hours_name:
+                          return f"arn:aws:connect:{region}:{account_id}:instance/{instance_id}/operating-hours/{hours['Id']}"
+                  return None
+              except Exception as e:
+                  print(f"Error finding hours of operation: {str(e)}")
+                  raise
+
+          def handler(event, context):
+              try:
+                  print(f"Event received: {json.dumps(event)}")
+                  
+                  if event['RequestType'] in ['Create', 'Update']:
+                      instance_id = event['ResourceProperties']['InstanceId']
+                      queue_name = event['ResourceProperties'].get('QueueName')
+                      hold_prompt_name = event['ResourceProperties'].get('CustomerHoldPromptName')
+                      queue_prompt_name = event['ResourceProperties'].get('QueuePromptName')
+                      hours_name = event['ResourceProperties'].get('OperationHoursName')                 
+                      
+                      connect = boto3.client('connect')
+                      response_data = {}
+                      
+                      # キューARNの取得
+                      if queue_name:
+                          queue_arn = find_queue_by_name(connect, instance_id, queue_name)
+                          if not queue_arn:
+                              raise Exception(f'Queue {queue_name} not found')
+                          response_data['QueueArn'] = queue_arn
+                      
+                      # Hold プロンプトARNの取得
+                      if hold_prompt_name:
+                          hold_prompt_arn = find_prompt_by_name(connect, instance_id, hold_prompt_name)
+                          if not hold_prompt_arn:
+                              raise Exception(f'Hold prompt {hold_prompt_name} not found')
+                          response_data['HoldPromptId'] = hold_prompt_arn
+                      
+                      # Queue プロンプトARNの取得
+                      if queue_prompt_name:
+                          queue_prompt_arn = find_prompt_by_name(connect, instance_id, queue_prompt_name)
+                          if not queue_prompt_arn:
+                              raise Exception(f'Queue prompt {queue_prompt_name} not found')
+                          response_data['QueuePromptId'] = queue_prompt_arn
+
+                      # Operating Hours ARNの取得
+                      if hours_name:
+                          hours_arn = find_hours_by_name(connect, instance_id, hours_name)
+                          if not hours_arn:
+                              raise Exception(f'Hours of Operation {hours_name} not found')
+                          response_data['HoursOfOperationArn'] = hours_arn
+                                  
+                      print(f"Response data: {json.dumps(response_data)}")
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  
+              except Exception as e:
+                  print(f"Error in handler: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {
+                      'Error': str(e)
+                  })
+      Timeout: 60
+      MemorySize: 256
+      ReservedConcurrentExecutions: 1
+      DeadLetterConfig:
+        TargetArn: !GetAtt DLQueue.Arn
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  ResourceLookup:
+    Type: Custom::ResourceLookup
+    DependsOn: ResourceLookupFunction
+    Properties:
+      ServiceToken: !GetAtt ResourceLookupFunction.Arn
+      InstanceId: !Select [1, !Split ['instance/', !Ref ConnectInstanceArn]]
+      CustomerHoldPromptName: 'CustomerHold.wav'
+      QueuePromptName: 'CustomerQueue.wav'
+      QueueName: 'BasicQueue'
+      OperationHoursName: 'Basic Hours'
+
+  CustomerQueueFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: ResourceLookup
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_customer_queue'
+      Description: 'Customer Queue Flow'
+      Type: 'CUSTOMER_QUEUE'
+      Content: !Sub 
+        - '{"Version":"2019-10-30","StartAction":"098007b7-e257-4b7c-9c3c-741d4680517d","Metadata":{"entryPointPosition":{"x":208,"y":40},"ActionMetadata":{"098007b7-e257-4b7c-9c3c-741d4680517d":{"position":{"x":376.8,"y":36.8},"parameters":{"Messages":[{"PromptId":{"displayName":"CustomerQueue.wav"}}]},"audio":[{"id":"${QueuePromptId}","text":"CustomerQueue.wav","type":"Prompt"}]},"1a8dc59e-01b1-4986-9ec6-165fc6e0c1e2":{"position":{"x":664,"y":56.8}}},"Annotations":[]},"Actions":[{"Parameters":{"Messages":[{"PromptId":"${QueuePromptId}"}]},"Identifier":"098007b7-e257-4b7c-9c3c-741d4680517d","Type":"MessageParticipantIteratively","Transitions":{"NextAction":"1a8dc59e-01b1-4986-9ec6-165fc6e0c1e2","Errors":[{"NextAction":"1a8dc59e-01b1-4986-9ec6-165fc6e0c1e2","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"1a8dc59e-01b1-4986-9ec6-165fc6e0c1e2","Type":"EndFlowExecution","Transitions":{}}]}'
+        - QueuePromptId: !GetAtt ResourceLookup.QueuePromptId
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  AgentWhisperFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: ResourceLookup
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_agent_whisper'
+      Description: 'AgentWhisper Flow'
+      Type: 'AGENT_WHISPER'
+      Content: '{"Version":"2019-10-30","StartAction":"713f6f07-ddd8-4465-9a42-8adcf6bca31a","Metadata":{"entryPointPosition":{"x":40,"y":40},"ActionMetadata":{"713f6f07-ddd8-4465-9a42-8adcf6bca31a":{"position":{"x":133.6,"y":142.4},"conditionMetadata":[{"id":"96d1b0ef-ea95-4253-a7c5-b762dd249693","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"-"}]},"1d05fa82-2d1e-47e7-b4be-68a80d6f1857":{"position":{"x":1100.8,"y":64}},"2ee57a16-5cd6-43fa-b5b2-858d437e9c95":{"position":{"x":387.2,"y":300},"parameters":{"CaseRequestFields":{"status":{"displayName":"Open"}}},"action":"updateCaseAction","requestFieldsOptions":{"status":"Open"}},"482223a9-7f62-4992-9af9-acfab76f22e6":{"position":{"x":659.2,"y":301.6},"parameters":{"CaseRequestFields":{"assigned_user":{"useDynamic":true},"case_reason":{"displayName":"問い合わせ"}}},"action":"updateCaseAction","requestFieldsOptions":{"case_reason":"問い合わせ"}}},"Annotations":[]},"Actions":[{"Parameters":{"ComparisonValue":"$.Attributes.var_CaseID"},"Identifier":"713f6f07-ddd8-4465-9a42-8adcf6bca31a","Type":"Compare","Transitions":{"NextAction":"2ee57a16-5cd6-43fa-b5b2-858d437e9c95","Conditions":[{"NextAction":"1d05fa82-2d1e-47e7-b4be-68a80d6f1857","Condition":{"Operator":"Equals","Operands":["-"]}}],"Errors":[{"NextAction":"2ee57a16-5cd6-43fa-b5b2-858d437e9c95","ErrorType":"NoMatchingCondition"}]}},{"Parameters":{},"Identifier":"1d05fa82-2d1e-47e7-b4be-68a80d6f1857","Type":"EndFlowExecution","Transitions":{}},{"Parameters":{"LinkContactToCase":"true","CaseId":"$.Attributes.var_CaseID","CaseRequestFields":{"status":"open"}},"Identifier":"2ee57a16-5cd6-43fa-b5b2-858d437e9c95","Type":"UpdateCase","Transitions":{"NextAction":"482223a9-7f62-4992-9af9-acfab76f22e6","Errors":[{"NextAction":"1d05fa82-2d1e-47e7-b4be-68a80d6f1857","ErrorType":"ContactNotLinked"},{"NextAction":"1d05fa82-2d1e-47e7-b4be-68a80d6f1857","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LinkContactToCase":"true","CaseId":"$.Attributes.var_CaseID","CaseRequestFields":{"assigned_user":"$.Agent.ARN","case_reason":"問い合わせ"}},"Identifier":"482223a9-7f62-4992-9af9-acfab76f22e6","Type":"UpdateCase","Transitions":{"NextAction":"1d05fa82-2d1e-47e7-b4be-68a80d6f1857","Errors":[{"NextAction":"1d05fa82-2d1e-47e7-b4be-68a80d6f1857","ErrorType":"ContactNotLinked"},{"NextAction":"1d05fa82-2d1e-47e7-b4be-68a80d6f1857","ErrorType":"NoMatchingError"}]}}]}'
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  CustomerHoldFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: ResourceLookup
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_customer_hold'
+      Description: 'Customer Hold Flow'
+      Type: 'CUSTOMER_HOLD'
+      Content: !Sub 
+        - '{"Version":"2019-10-30","StartAction":"d5f80252-e10d-4a2f-984e-db331e4cd036","Metadata":{"entryPointPosition":{"x":40,"y":40},"ActionMetadata":{"d5f80252-e10d-4a2f-984e-db331e4cd036":{"position":{"x":171.2,"y":37.6},"parameters":{"Messages":[{"PromptId":{"displayName":null}}]},"audio":[{"id":"${HoldPromptId}","text":null,"type":"Prompt"}]}},"Annotations":[]},"Actions":[{"Parameters":{"Messages":[{"PromptId":"${HoldPromptId}"}]},"Identifier":"d5f80252-e10d-4a2f-984e-db331e4cd036","Type":"MessageParticipantIteratively","Transitions":{}}]}'
+        - HoldPromptId: !GetAtt ResourceLookup.HoldPromptId
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  AgentHoldFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: ResourceLookup
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_agent_hold'
+      Description: 'Agent Hold Flow'
+      Type: 'AGENT_HOLD'
+      Content: !Sub 
+        - '{"Version":"2019-10-30","StartAction":"30119548-f8b4-4985-aacd-74df4ef40d7a","Metadata":{"entryPointPosition":{"x":40,"y":40},"ActionMetadata":{"30119548-f8b4-4985-aacd-74df4ef40d7a":{"position":{"x":172.8,"y":40},"parameters":{"Messages":[{"PromptId":{}}]},"audio":[{"id":"${HoldPromptId}","type":"Prompt"}]}},"Annotations":[]},"Actions":[{"Parameters":{"Messages":[{"PromptId":"${HoldPromptId}"}]},"Identifier":"30119548-f8b4-4985-aacd-74df4ef40d7a","Type":"MessageParticipantIteratively","Transitions":{}}]}'
+        - HoldPromptId: !GetAtt ResourceLookup.HoldPromptId
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  OutboundFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: [CustomerHoldFlow, AgentHoldFlow]
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_Outbound'
+      Description: 'Outbound Flow with QiC integration. QiC can be turned off in the flow settings.'
+      Type: 'OUTBOUND_WHISPER'
+      Content: !Sub 
+        - |
+          {"Version":"2019-10-30","StartAction":"2636cc1d-ece3-42ec-b932-ba48d0754ddb","Metadata":{"entryPointPosition":{"x":-172,"y":-90.4},"ActionMetadata":{"2636cc1d-ece3-42ec-b932-ba48d0754ddb":{"position":{"x":-60.8,"y":-90.4}},"1b230c02-8630-4f46-8593-29a777cbc74e":{"position":{"x":-61.6,"y":110.4},"overrideConsoleVoice":true},"c2a77b6b-1579-4870-abf1-bf45f7fa6197":{"position":{"x":-59.2,"y":326.4}},"47b631eb-4313-4ff9-adb1-e2fa9803da06":{"position":{"x":186.4,"y":-15.2},"children":["97f1a6a6-c025-41c3-968c-e99d67e3396d"],"parameters":{"WisdomAssistantArn":{"displayName":"${QiCDomainArn}"}},"fragments":{"SetContactData":"97f1a6a6-c025-41c3-968c-e99d67e3396d"}},"97f1a6a6-c025-41c3-968c-e99d67e3396d":{"position":{"x":186.4,"y":-15.2},"dynamicParams":[]},"7a6f9a05-1886-4c7b-b486-47d9095eff89":{"position":{"x":420,"y":-15.2},"parameters":{"Attributes":{"Key1":{"useDynamic":true}}},"dynamicParams":["Key1"]},"3a81b14d-7672-4182-97b6-f56e28c2c293":{"position":{"x":420,"y":212},"dynamicParams":[]},"cf221110-ee52-4746-a2b3-4568b8824251":{"position":{"x":693.6,"y":-7.2},"parameters":{"EventHooks":{"AgentHold":{"displayName":"${AgentHoldFlowName}"}}},"contactFlow":{"text":"${AgentHoldFlowName}","id":"${AgentHoldFlowArn}"},"customerOrAgent":false},"cedab583-49ff-41d0-ad62-85e97f06850d":{"position":{"x":939.2,"y":-8},"parameters":{"EventHooks":{"CustomerHold":{"displayName":"${CustomerHoldFlowName}"}}},"contactFlow":{"text":"${CustomerHoldFlowName}","id":"${CustomerHoldFlowArn}"},"customerOrAgent":true},"fe0cff31-99e2-4b4a-b1ec-ff7baa711d7b":{"position":{"x":1173.6,"y":-7.2}}},"Annotations":[]},"Actions":[{"Parameters":{"FlowLoggingBehavior":"Enabled"},"Identifier":"2636cc1d-ece3-42ec-b932-ba48d0754ddb","Type":"UpdateFlowLoggingBehavior","Transitions":{"NextAction":"1b230c02-8630-4f46-8593-29a777cbc74e"}},{"Parameters":{"TextToSpeechEngine":"Neural","TextToSpeechStyle":"None","TextToSpeechVoice":"Kazuha"},"Identifier":"1b230c02-8630-4f46-8593-29a777cbc74e","Type":"UpdateContactTextToSpeechVoice","Transitions":{"NextAction":"c2a77b6b-1579-4870-abf1-bf45f7fa6197","Errors":[{"NextAction":"c2a77b6b-1579-4870-abf1-bf45f7fa6197","ErrorType":"NoMatchingError"}]}},{"Parameters":{"RecordingBehavior":{"RecordedParticipants":["Agent","Customer"],"IVRRecordingBehavior":"Enabled"},"AnalyticsBehavior":{"Enabled":"True","AnalyticsLanguage":"ja-JP","AnalyticsRedactionBehavior":"Disabled","AnalyticsRedactionResults":"None","ChannelConfiguration":{"Chat":{"AnalyticsModes":[]},"Voice":{"AnalyticsModes":["RealTime"]}},"SentimentConfiguration":{"Enabled":"True"}}},"Identifier":"c2a77b6b-1579-4870-abf1-bf45f7fa6197","Type":"UpdateContactRecordingBehavior","Transitions":{"NextAction":"47b631eb-4313-4ff9-adb1-e2fa9803da06"}},{"Parameters":{"WisdomAssistantArn":"${QiCDomainArn}"},"Identifier":"47b631eb-4313-4ff9-adb1-e2fa9803da06","Type":"CreateWisdomSession","Transitions":{"NextAction":"97f1a6a6-c025-41c3-968c-e99d67e3396d","Errors":[{"NextAction":"7a6f9a05-1886-4c7b-b486-47d9095eff89","ErrorType":"NoMatchingError"}]}},{"Parameters":{"WisdomSessionArn":"$.Wisdom.SessionArn"},"Identifier":"97f1a6a6-c025-41c3-968c-e99d67e3396d","Type":"UpdateContactData","Transitions":{"NextAction":"7a6f9a05-1886-4c7b-b486-47d9095eff89","Errors":[{"NextAction":"7a6f9a05-1886-4c7b-b486-47d9095eff89","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"Key1":"$.SystemEndpoint.Address","Key2":"-","Key3":"-","Key4":"-","Key5":"-","Key6":"-","Key7":"-","Key8":"-","Key9":"-","Key10":"-"},"TargetContact":"Current"},"Identifier":"7a6f9a05-1886-4c7b-b486-47d9095eff89","Type":"UpdateContactAttributes","Transitions":{"NextAction":"3a81b14d-7672-4182-97b6-f56e28c2c293","Errors":[{"NextAction":"3a81b14d-7672-4182-97b6-f56e28c2c293","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"var_CaseID":"-"},"TargetContact":"Current"},"Identifier":"3a81b14d-7672-4182-97b6-f56e28c2c293","Type":"UpdateContactAttributes","Transitions":{"NextAction":"cf221110-ee52-4746-a2b3-4568b8824251","Errors":[{"NextAction":"cf221110-ee52-4746-a2b3-4568b8824251","ErrorType":"NoMatchingError"}]}},{"Parameters":{"EventHooks":{"AgentHold":"${AgentHoldFlowArn}"}},"Identifier":"cf221110-ee52-4746-a2b3-4568b8824251","Type":"UpdateContactEventHooks","Transitions":{"NextAction":"cedab583-49ff-41d0-ad62-85e97f06850d","Errors":[{"NextAction":"cedab583-49ff-41d0-ad62-85e97f06850d","ErrorType":"NoMatchingError"}]}},{"Parameters":{"EventHooks":{"CustomerHold":"${CustomerHoldFlowArn}"}},"Identifier":"cedab583-49ff-41d0-ad62-85e97f06850d","Type":"UpdateContactEventHooks","Transitions":{"NextAction":"fe0cff31-99e2-4b4a-b1ec-ff7baa711d7b","Errors":[{"NextAction":"fe0cff31-99e2-4b4a-b1ec-ff7baa711d7b","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"fe0cff31-99e2-4b4a-b1ec-ff7baa711d7b","Type":"EndFlowExecution","Transitions":{}}]}
+        - CustomerHoldFlowArn: !GetAtt CustomerHoldFlow.ContactFlowArn
+          AgentHoldFlowArn: !GetAtt AgentHoldFlow.ContactFlowArn
+          CustomerHoldFlowName: !Sub '${FlowNamePrefix}_AC_PKG_customer_hold'
+          AgentHoldFlowName: !Sub '${FlowNamePrefix}_AC_PKG_agent_hold'
+          QiCDomainArn: !Ref QiCDomainArn
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+
+  ContactFlowModule1:
+    Type: 'AWS::Connect::ContactFlowModule'
+    DependsOn: [CustomerHoldFlow, CustomerQueueFlow, AgentHoldFlow, AgentWhisperFlow]
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_init_flowModule'
+      Description: 'Initial configuration module for Contact flows.'
+      Content: !Sub 
+        - |
+          {"Version":"2019-10-30","StartAction":"83174c33-2df2-4ba1-8a14-21c00ec0c944","Metadata":{"entryPointPosition":{"x":-264,"y":60},"ActionMetadata":{"83174c33-2df2-4ba1-8a14-21c00ec0c944":{"position":{"x":-134.4,"y":57.6}},"a42c589e-b91d-45fa-87a1-9a05852b78a3":{"position":{"x":-140.8,"y":229.6},"overrideConsoleVoice":true},"b765fcc1-553d-46e7-9fd8-95c139d536fc":{"position":{"x":-136,"y":432}},"ae2da10f-6c3a-4233-9cbd-f16e6ed912f1":{"position":{"x":689.6,"y":200},"parameters":{"EventHooks":{"CustomerHold":{"displayName":"${CustomerHoldFlowName}"}}},"contactFlow":{"text":"${CustomerHoldFlowName}","id":"${CustomerHoldFlowArn}"},"customerOrAgent":true},"3d3ff3e9-967f-4a16-9cab-799470650a61":{"position":{"x":915.2,"y":198.4},"parameters":{"EventHooks":{"CustomerQueue":{"displayName":"${CustomerQueueFlowName}"}}},"contactFlow":{"text":"${CustomerQueueFlowName}","id":"${CustomerQueueFlowArn}"},"customerOrAgent":true},"5f90b492-7dd1-4de9-bbe8-c152323686fe":{"position":{"x":114.4,"y":176},"parameters":{"Attributes":{"Key1":{"useDynamic":true}}},"dynamicParams":["Key1"]},"1a2ff2e6-515a-4b18-a200-f6a7e10afb73":{"position":{"x":452,"y":202.4},"parameters":{"EventHooks":{"AgentHold":{"displayName":"${AgentHoldFlowName}"}}},"contactFlow":{"text":"${AgentHoldFlowName}","id":"${AgentHoldFlowArn}"},"customerOrAgent":false},"16ead94d-33f0-4f28-8fc3-61256353ccf2":{"position":{"x":168,"y":388.8},"dynamicParams":[]},"f79ef841-5bb2-4dda-b4aa-5c1c4ae26926":{"position":{"x":1140.8,"y":196.8},"parameters":{"EventHooks":{"AgentWhisper":{"displayName":"${AgentWhisperFlowName}"}}},"contactFlow":{"text":"${AgentWhisperFlowName}","id":"${AgentWhisperFlowArn}"},"customerOrAgent":false},"5b16d10f-6862-4dfb-9227-7d2c6764cd0f":{"position":{"x":1634.4,"y":224.8}},"638a59a5-3598-44ce-ba12-6beb72722fc3":{"position":{"x":1371.2,"y":195.2}}},"Annotations":[]},"Actions":[{"Parameters":{"FlowLoggingBehavior":"Enabled"},"Identifier":"83174c33-2df2-4ba1-8a14-21c00ec0c944","Type":"UpdateFlowLoggingBehavior","Transitions":{"NextAction":"a42c589e-b91d-45fa-87a1-9a05852b78a3"}},{"Parameters":{"TextToSpeechEngine":"Neural","TextToSpeechStyle":"None","TextToSpeechVoice":"Kazuha"},"Identifier":"a42c589e-b91d-45fa-87a1-9a05852b78a3","Type":"UpdateContactTextToSpeechVoice","Transitions":{"NextAction":"b765fcc1-553d-46e7-9fd8-95c139d536fc","Errors":[{"NextAction":"b765fcc1-553d-46e7-9fd8-95c139d536fc","ErrorType":"NoMatchingError"}]}},{"Parameters":{"RecordingBehavior":{"RecordedParticipants":["Agent","Customer"],"IVRRecordingBehavior":"Enabled"},"AnalyticsBehavior":{"Enabled":"True","AnalyticsLanguage":"ja-JP","AnalyticsRedactionBehavior":"Disabled","AnalyticsRedactionResults":"None","ChannelConfiguration":{"Chat":{"AnalyticsModes":[]},"Voice":{"AnalyticsModes":["RealTime"]}},"SentimentConfiguration":{"Enabled":"True"}}},"Identifier":"b765fcc1-553d-46e7-9fd8-95c139d536fc","Type":"UpdateContactRecordingBehavior","Transitions":{"NextAction":"5f90b492-7dd1-4de9-bbe8-c152323686fe"}},{"Parameters":{"EventHooks":{"CustomerHold":"${CustomerHoldFlowArn}"}},"Identifier":"ae2da10f-6c3a-4233-9cbd-f16e6ed912f1","Type":"UpdateContactEventHooks","Transitions":{"NextAction":"3d3ff3e9-967f-4a16-9cab-799470650a61","Errors":[{"NextAction":"3d3ff3e9-967f-4a16-9cab-799470650a61","ErrorType":"NoMatchingError"}]}},{"Parameters":{"EventHooks":{"CustomerQueue":"${CustomerQueueFlowArn}"}},"Identifier":"3d3ff3e9-967f-4a16-9cab-799470650a61","Type":"UpdateContactEventHooks","Transitions":{"NextAction":"f79ef841-5bb2-4dda-b4aa-5c1c4ae26926","Errors":[{"NextAction":"f79ef841-5bb2-4dda-b4aa-5c1c4ae26926","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"Key1":"$.SystemEndpoint.Address","Key2":"-","Key3":"-","Key4":"-","Key5":"-","Key6":"-","Key7":"-","Key8":"-","Key9":"-","Key10":"-"},"TargetContact":"Current"},"Identifier":"5f90b492-7dd1-4de9-bbe8-c152323686fe","Type":"UpdateContactAttributes","Transitions":{"NextAction":"16ead94d-33f0-4f28-8fc3-61256353ccf2","Errors":[{"NextAction":"16ead94d-33f0-4f28-8fc3-61256353ccf2","ErrorType":"NoMatchingError"}]}},{"Parameters":{"EventHooks":{"AgentHold":"${AgentHoldFlowArn}"}},"Identifier":"1a2ff2e6-515a-4b18-a200-f6a7e10afb73","Type":"UpdateContactEventHooks","Transitions":{"NextAction":"ae2da10f-6c3a-4233-9cbd-f16e6ed912f1","Errors":[{"NextAction":"ae2da10f-6c3a-4233-9cbd-f16e6ed912f1","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"var_CaseID":"-"},"TargetContact":"Current"},"Identifier":"16ead94d-33f0-4f28-8fc3-61256353ccf2","Type":"UpdateContactAttributes","Transitions":{"NextAction":"1a2ff2e6-515a-4b18-a200-f6a7e10afb73","Errors":[{"NextAction":"1a2ff2e6-515a-4b18-a200-f6a7e10afb73","ErrorType":"NoMatchingError"}]}},{"Parameters":{"EventHooks":{"AgentWhisper":"${AgentWhisperFlowArn}"},"EventHooksConfiguration":{"AgentWhisper":{"DisableExecution":"false"}}},"Identifier":"f79ef841-5bb2-4dda-b4aa-5c1c4ae26926","Type":"UpdateContactEventHooks","Transitions":{"NextAction":"638a59a5-3598-44ce-ba12-6beb72722fc3","Errors":[{"NextAction":"638a59a5-3598-44ce-ba12-6beb72722fc3","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"5b16d10f-6862-4dfb-9227-7d2c6764cd0f","Type":"EndFlowModuleExecution","Transitions":{}},{"Parameters":{"EventHooksConfiguration":{"CustomerWhisper":{"DisableExecution":"true"}}},"Identifier":"638a59a5-3598-44ce-ba12-6beb72722fc3","Type":"UpdateContactEventHooks","Transitions":{"NextAction":"5b16d10f-6862-4dfb-9227-7d2c6764cd0f","Errors":[{"NextAction":"5b16d10f-6862-4dfb-9227-7d2c6764cd0f","ErrorType":"NoMatchingError"}]}}],"Settings":{"InputParameters":[],"OutputParameters":[],"Transitions":[]}}
+        - CustomerHoldFlowArn: !GetAtt CustomerHoldFlow.ContactFlowArn
+          CustomerQueueFlowArn: !GetAtt CustomerQueueFlow.ContactFlowArn
+          AgentHoldFlowArn: !GetAtt AgentHoldFlow.ContactFlowArn
+          AgentWhisperFlowArn: !GetAtt AgentWhisperFlow.ContactFlowArn
+          CustomerHoldFlowName: !Sub '${FlowNamePrefix}_AC_PKG_customer_hold'
+          CustomerQueueFlowName: !Sub '${FlowNamePrefix}_AC_PKG_customer_queue'
+          AgentHoldFlowName: !Sub '${FlowNamePrefix}_AC_PKG_agent_hold'
+          AgentWhisperFlowName: !Sub '${FlowNamePrefix}_AC_PKG_agent_whisper'
+      State: 'ACTIVE'
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  MainContactFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: ContactFlowModule1
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_Inbound_flow'
+      Description: 'Main inbound contact flow with QiC integration. QiC can be turned off by switching the flow module in the flow. Please copy this flow and create a flow for each phone number.'
+      Type: 'CONTACT_FLOW'
+      Content: !Sub 
+        - |
+          {"Version":"2019-10-30","StartAction":"dc172469-09be-4a79-a5ca-efaa9f2a0a05","Metadata":{"entryPointPosition":{"x":-194.4,"y":16.8},"ActionMetadata":{"fb24fe01-7baa-4d48-a036-f83c418f78ae":{"position":{"x":702.4,"y":212.8}},"39badec7-2ad5-4939-90c0-cceb97e04b4b":{"position":{"x":3204,"y":523.2}},"74a81792-60fa-4d09-9c58-3474e63572ad":{"position":{"x":639.2,"y":492.8}},"482309a4-2586-4e34-a7c0-2500df87bbfb":{"position":{"x":706.4,"y":-40}},"e3fc0886-3442-4a97-9a59-0cf169af10c6":{"position":{"x":968.8,"y":-43.2},"parameters":{"QueueId":{"displayName":"BasicQueue"}},"queue":{"text":"BasicQueue"}},"1d2e5256-3995-4e8c-a474-0a36ea2f1720":{"position":{"x":1232.8,"y":-43.2},"parameters":{"QueueId":{"displayName":"BasicQueue"}},"queue":{"text":"BasicQueue","id":"${QueueArn}"}},"bb1d192e-6536-4442-bb85-1c560f2b8269":{"position":{"x":1552.8,"y":-135.2},"parameters":{"QueueId":{"displayName":"BasicQueue"}},"queue":{"text":"BasicQueue","id":"${QueueArn}"}},"cb96d8dc-938c-4c9a-ba75-198601e6ab72":{"position":{"x":1854.4,"y":152}},"dcfa719a-5382-4041-8f97-db3373b95cf4":{"position":{"x":1856.8,"y":-137.6}},"dda831bc-7dac-4d7f-b6a8-722153aab5f6":{"position":{"x":2988,"y":-784.8},"parameters":{"Attributes":{"var_CaseID":{"useDynamic":true}}},"dynamicParams":["var_CaseID"]},"772f897d-a070-4889-bb04-ab951ce7cf59":{"position":{"x":2076.8,"y":-419.2},"parameters":{"ProfileRequestData":{"IdentifierName":{"displayName":"電話"},"IdentifierValue":{"useDynamic":true}}},"useDynamic":{"IdentifierName":true,"IdentifierValue":true}},"4e42285b-8099-40d6-9ffe-03fd61c8ca09":{"position":{"x":2295.2,"y":-197.6},"parameters":{"ProfileRequestData":{"HomePhoneNumber":{"useDynamic":true}}},"useDynamic":{"HomePhoneNumber":true}},"e845e9e0-9afb-41b6-8ec2-52ce887a96f6":{"position":{"x":2349.6,"y":-625.6},"parameters":{"CaseRequestFields":{"customer_id":{"useDynamic":true},"status":{"displayName":"Open"}}},"action":"getCaseAction","requestFieldsOptions":{"status":"Open"}},"7d088db1-c71c-4fb4-bec2-a18c548b8ca4":{"position":{"x":2688.8,"y":-474.4},"parameters":{"CaseTemplateId":{"displayName":"${CaseTemplateName}"},"CaseRequestFields":{"assigned_queue":{"useDynamic":true},"customer_id":{"useDynamic":true},"status":{"displayName":"Open"},"title":{"useDynamic":true}}},"action":"createCaseAction","templateName":"${CaseTemplateName}"},"78fdc6ef-b58b-4fc6-86a4-3f95ad3ba5c2":{"position":{"x":2990.4,"y":-519.2}},"b6de6f6c-c2d4-463a-938c-970125d3aff5":{"position":{"x":3817.6,"y":-204}},"df816858-6599-4ba5-b813-9ffff275c0d6":{"position":{"x":3269.6,"y":-522.4},"parameters":{"CaseRequestFields":{"case_reason":{"displayName":"放棄呼"},"status":{"displayName":"Closed"}},"caseId":{"useDynamic":true}}},"728c1bb9-53c0-48e1-8191-29da510326e5":{"position":{"x":406.4,"y":70.4},"parameters":{"HoursOfOperationId":{"displayName":"Basic Hours"}},"Hours":{"id":"${OperatingHoursArn}","text":"Basic Hours"}},"dc172469-09be-4a79-a5ca-efaa9f2a0a05":{"position":{"x":-73.6,"y":67.2},"parameters":{"FlowModuleId":{"displayName":"${FlowModuleName}"}},"contactFlowModuleName":"${FlowModuleName}"},"f126fd7d-248f-46ed-ad3e-866a243f00d4":{"position":{"x":160.8,"y":61.6},"children":["16efb5f2-26b9-4f13-bcb0-72d5419c3c94"],"parameters":{"WisdomAssistantArn":{"displayName":"${QiCDomainArn}"}},"fragments":{"SetContactData":"16efb5f2-26b9-4f13-bcb0-72d5419c3c94"}},"16efb5f2-26b9-4f13-bcb0-72d5419c3c94":{"position":{"x":160.8,"y":61.6},"dynamicParams":[]}},"Annotations":[]},"Actions":[{"Parameters":{"Text":"お電話ありがとうございます。サンプルカンパニーです。只今の時間は営業時間外となっております。営業時間は、平日は、午前9時から午後6時まで、土曜、日曜、祝日は、午前9時から午後5時までとなっております。営業時間内におかけなおしくださいますようよろしくお願い致します。お電話ありがとうございました。"},"Identifier":"fb24fe01-7baa-4d48-a036-f83c418f78ae","Type":"MessageParticipant","Transitions":{"NextAction":"39badec7-2ad5-4939-90c0-cceb97e04b4b","Errors":[{"NextAction":"39badec7-2ad5-4939-90c0-cceb97e04b4b","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"39badec7-2ad5-4939-90c0-cceb97e04b4b","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Text":"システムメンテナンスのためお繋ぎすることができません。しばらくたってからおかけ直しくださいますようよろしくお願い申し上げます。"},"Identifier":"74a81792-60fa-4d09-9c58-3474e63572ad","Type":"MessageParticipant","Transitions":{"NextAction":"39badec7-2ad5-4939-90c0-cceb97e04b4b","Errors":[{"NextAction":"39badec7-2ad5-4939-90c0-cceb97e04b4b","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"お電話ありがとうございます。サンプルカンパニーです。"},"Identifier":"482309a4-2586-4e34-a7c0-2500df87bbfb","Type":"MessageParticipant","Transitions":{"NextAction":"e3fc0886-3442-4a97-9a59-0cf169af10c6","Errors":[{"NextAction":"e3fc0886-3442-4a97-9a59-0cf169af10c6","ErrorType":"NoMatchingError"}]}},{"Parameters":{"QueueId":"${QueueArn}"},"Identifier":"e3fc0886-3442-4a97-9a59-0cf169af10c6","Type":"UpdateContactTargetQueue","Transitions":{"NextAction":"1d2e5256-3995-4e8c-a474-0a36ea2f1720","Errors":[{"NextAction":"1d2e5256-3995-4e8c-a474-0a36ea2f1720","ErrorType":"NoMatchingError"}]}},{"Parameters":{"QueueId":"${QueueArn}","MetricType":"NumberOfContactsInQueue"},"Identifier":"1d2e5256-3995-4e8c-a474-0a36ea2f1720","Type":"CheckMetricData","Transitions":{"NextAction":"cb96d8dc-938c-4c9a-ba75-198601e6ab72","Conditions":[{"NextAction":"bb1d192e-6536-4442-bb85-1c560f2b8269","Condition":{"Operator":"NumberLessOrEqualTo","Operands":["2"]}}],"Errors":[{"NextAction":"cb96d8dc-938c-4c9a-ba75-198601e6ab72","ErrorType":"NoMatchingCondition"},{"NextAction":"cb96d8dc-938c-4c9a-ba75-198601e6ab72","ErrorType":"NoMatchingError"}]}},{"Parameters":{"MetricType":"NumberOfAgentsOnline","QueueId":"${QueueArn}"},"Identifier":"bb1d192e-6536-4442-bb85-1c560f2b8269","Type":"CheckMetricData","Transitions":{"NextAction":"cb96d8dc-938c-4c9a-ba75-198601e6ab72","Conditions":[{"NextAction":"dcfa719a-5382-4041-8f97-db3373b95cf4","Condition":{"Operator":"NumberGreaterThan","Operands":["0"]}}],"Errors":[{"NextAction":"cb96d8dc-938c-4c9a-ba75-198601e6ab72","ErrorType":"NoMatchingCondition"},{"NextAction":"cb96d8dc-938c-4c9a-ba75-198601e6ab72","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"只今、電話が大変混雑しております。このままお待ちいただくかしばらくたってからおかけなおしくださいますようよろしくお願い致します。"},"Identifier":"cb96d8dc-938c-4c9a-ba75-198601e6ab72","Type":"MessageParticipant","Transitions":{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","Errors":[{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"担当へお繋ぎします。このままお待ちください。"},"Identifier":"dcfa719a-5382-4041-8f97-db3373b95cf4","Type":"MessageParticipant","Transitions":{"NextAction":"772f897d-a070-4889-bb04-ab951ce7cf59","Errors":[{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"var_CaseID":"$.Case.case_id"},"TargetContact":"Current"},"Identifier":"dda831bc-7dac-4d7f-b6a8-722153aab5f6","Type":"UpdateContactAttributes","Transitions":{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","Errors":[{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"ProfileRequestData":{"IdentifierName":"_phone","IdentifierValue":"$.CustomerEndpoint.Address"},"ProfileResponseData":["PhoneNumber"]},"Identifier":"772f897d-a070-4889-bb04-ab951ce7cf59","Type":"GetCustomerProfile","Transitions":{"NextAction":"e845e9e0-9afb-41b6-8ec2-52ce887a96f6","Errors":[{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"NoMatchingError"},{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"MultipleFoundError"},{"NextAction":"4e42285b-8099-40d6-9ffe-03fd61c8ca09","ErrorType":"NoneFoundError"}]}},{"Parameters":{"ProfileRequestData":{"HomePhoneNumber":"$.CustomerEndpoint.Address"},"ProfileResponseData":[]},"Identifier":"4e42285b-8099-40d6-9ffe-03fd61c8ca09","Type":"CreateCustomerProfile","Transitions":{"NextAction":"7d088db1-c71c-4fb4-bec2-a18c548b8ca4","Errors":[{"NextAction":"7d088db1-c71c-4fb4-bec2-a18c548b8ca4","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LinkContactToCase":"true","GetLastUpdatedCase":"false","CaseRequestFields":{"customer_id":"$.Customer.ProfileARN","status":"open"}},"Identifier":"e845e9e0-9afb-41b6-8ec2-52ce887a96f6","Type":"GetCase","Transitions":{"NextAction":"dda831bc-7dac-4d7f-b6a8-722153aab5f6","Errors":[{"NextAction":"7d088db1-c71c-4fb4-bec2-a18c548b8ca4","ErrorType":"ContactNotLinked"},{"NextAction":"dda831bc-7dac-4d7f-b6a8-722153aab5f6","ErrorType":"MultipleFound"},{"NextAction":"7d088db1-c71c-4fb4-bec2-a18c548b8ca4","ErrorType":"NoneFound"},{"NextAction":"7d088db1-c71c-4fb4-bec2-a18c548b8ca4","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LinkContactToCase":"true","CaseTemplateId":"${CaseTemplateId}","CaseRequestFields":{"assigned_queue":"$.Queue.ARN","customer_id":"$.Customer.ProfileARN","status":"open","title":"$.InitialContactId"}},"Identifier":"7d088db1-c71c-4fb4-bec2-a18c548b8ca4","Type":"CreateCase","Transitions":{"NextAction":"78fdc6ef-b58b-4fc6-86a4-3f95ad3ba5c2","Errors":[{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"ContactNotLinked"},{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Attributes":{"var_CaseID":"$.Case.case_id"},"TargetContact":"Current"},"Identifier":"78fdc6ef-b58b-4fc6-86a4-3f95ad3ba5c2","Type":"UpdateContactAttributes","Transitions":{"NextAction":"df816858-6599-4ba5-b813-9ffff275c0d6","Errors":[{"NextAction":"df816858-6599-4ba5-b813-9ffff275c0d6","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"b6de6f6c-c2d4-463a-938c-970125d3aff5","Type":"TransferContactToQueue","Transitions":{"NextAction":"39badec7-2ad5-4939-90c0-cceb97e04b4b","Errors":[{"NextAction":"39badec7-2ad5-4939-90c0-cceb97e04b4b","ErrorType":"QueueAtCapacity"},{"NextAction":"39badec7-2ad5-4939-90c0-cceb97e04b4b","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LinkContactToCase":"true","CaseId":"$.Attributes.var_CaseID","CaseRequestFields":{"case_reason":"放棄呼","status":"closed"}},"Identifier":"df816858-6599-4ba5-b813-9ffff275c0d6","Type":"UpdateCase","Transitions":{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","Errors":[{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"ContactNotLinked"},{"NextAction":"b6de6f6c-c2d4-463a-938c-970125d3aff5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"HoursOfOperationId":"${OperatingHoursArn}"},"Identifier":"728c1bb9-53c0-48e1-8191-29da510326e5","Type":"CheckHoursOfOperation","Transitions":{"NextAction":"74a81792-60fa-4d09-9c58-3474e63572ad","Conditions":[{"NextAction":"482309a4-2586-4e34-a7c0-2500df87bbfb","Condition":{"Operator":"Equals","Operands":["True"]}},{"NextAction":"fb24fe01-7baa-4d48-a036-f83c418f78ae","Condition":{"Operator":"Equals","Operands":["False"]}}],"Errors":[{"NextAction":"74a81792-60fa-4d09-9c58-3474e63572ad","ErrorType":"NoMatchingError"}]}},{"Parameters":{"FlowModuleId":"${FlowModuleArn}"},"Identifier":"dc172469-09be-4a79-a5ca-efaa9f2a0a05","Type":"InvokeFlowModule","Transitions":{"NextAction":"f126fd7d-248f-46ed-ad3e-866a243f00d4","Errors":[{"NextAction":"f126fd7d-248f-46ed-ad3e-866a243f00d4","ErrorType":"NoMatchingError"}]}},{"Parameters":{"WisdomAssistantArn":"${QiCDomainArn}"},"Identifier":"f126fd7d-248f-46ed-ad3e-866a243f00d4","Type":"CreateWisdomSession","Transitions":{"NextAction":"16efb5f2-26b9-4f13-bcb0-72d5419c3c94","Errors":[{"NextAction":"728c1bb9-53c0-48e1-8191-29da510326e5","ErrorType":"NoMatchingError"}]}},{"Parameters":{"WisdomSessionArn":"$.Wisdom.SessionArn"},"Identifier":"16efb5f2-26b9-4f13-bcb0-72d5419c3c94","Type":"UpdateContactData","Transitions":{"NextAction":"728c1bb9-53c0-48e1-8191-29da510326e5","Errors":[{"NextAction":"728c1bb9-53c0-48e1-8191-29da510326e5","ErrorType":"NoMatchingError"}]}}]}
+        - FlowModuleArn: !GetAtt ContactFlowModule1.ContactFlowModuleArn
+          FlowModuleName: !Sub '${FlowNamePrefix}_AC_PKG_init_flowModule'
+          OperatingHoursArn: !GetAtt ResourceLookup.HoursOfOperationArn
+          CaseTemplateId: !Ref CaseTemplateId
+          CaseTemplateName: !Ref CaseTemplateName
+          QueueArn: !GetAtt ResourceLookup.QueueArn
+          QiCDomainArn: !Ref QiCDomainArn
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  SelfServiceContactFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: ContactFlowModule1
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_self_service_Inbound_flow'
+      Description: 'Contact flow with Lex Bot integration'
+      Type: 'CONTACT_FLOW'
+      Content: !Sub 
+        - |
+          {"Version":"2019-10-30","StartAction":"bab192bc-747a-4a09-994e-da9975e0a395","Metadata":{"entryPointPosition":{"x":-77.6,"y":30.4},"ActionMetadata":{"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6":{"position":{"x":1498.4,"y":290.4}},"08ec81c4-2220-4c2e-8878-10c34b264872":{"position":{"x":791.2,"y":380.8}},"f90d12f5-8a13-4266-90f5-32def7efca56":{"position":{"x":1054.4,"y":383.2}},"a38eef87-554a-4089-8183-3597f7073aaf":{"position":{"x":1277.6,"y":74.4}},"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f":{"position":{"x":792,"y":79.2},"parameters":{"LexV2Bot":{"AliasArn":{"displayName":"TestBotAlias","useLexBotDropdown":true,"lexV2BotName":"${LexBotName}"}},"LexTimeoutSeconds":{"Text":{"unit":60}}},"useLexBotDropdown":true,"lexV2BotName":"${LexBotName}","lexV2BotAliasName":"TestBotAlias","conditionMetadata":[]},"969f43a5-3bb6-4251-943f-e8164f4e75c4":{"position":{"x":527.2,"y":81.6}},"aa5dff96-fa9e-47fd-b695-7ab159f40dab":{"position":{"x":285.6,"y":88},"children":["0e6b8c61-aeed-430c-9074-86cc1d1be3db"],"parameters":{"WisdomAssistantArn":{"displayName":"${QiCDomainArn}"}},"fragments":{"SetContactData":"0e6b8c61-aeed-430c-9074-86cc1d1be3db"}},"0e6b8c61-aeed-430c-9074-86cc1d1be3db":{"position":{"x":285.6,"y":88},"dynamicParams":[]},"bab192bc-747a-4a09-994e-da9975e0a395":{"position":{"x":48,"y":84},"parameters":{"FlowModuleId":{"displayName":"${FlowModuleName}"}},"contactFlowModuleName":"${FlowModuleName}"}},"Annotations":[]},"Actions":[{"Parameters":{},"Identifier":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Text":"認識できませんでした。"},"Identifier":"08ec81c4-2220-4c2e-8878-10c34b264872","Type":"MessageParticipant","Transitions":{"NextAction":"f90d12f5-8a13-4266-90f5-32def7efca56","Errors":[{"NextAction":"f90d12f5-8a13-4266-90f5-32def7efca56","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LoopCount":"2"},"Identifier":"f90d12f5-8a13-4266-90f5-32def7efca56","Type":"Loop","Transitions":{"NextAction":"a38eef87-554a-4089-8183-3597f7073aaf","Conditions":[{"NextAction":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","Condition":{"Operator":"Equals","Operands":["ContinueLooping"]}},{"NextAction":"a38eef87-554a-4089-8183-3597f7073aaf","Condition":{"Operator":"Equals","Operands":["DoneLooping"]}}]}},{"Parameters":{"Text":"お問い合わせ頂きありがとうございました。"},"Identifier":"a38eef87-554a-4089-8183-3597f7073aaf","Type":"MessageParticipant","Transitions":{"NextAction":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","Errors":[{"NextAction":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"Amazon Connect に関するご質問にお答え致します。では、どうぞ。","LexV2Bot":{"AliasArn":"arn:aws:lex:ap-northeast-1:${AwsAccountId}:bot-alias/${LexBotId}/TSTALIASID"},"LexTimeoutSeconds":{"Text":"60"}},"Identifier":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","Type":"ConnectParticipantWithLexBot","Transitions":{"NextAction":"08ec81c4-2220-4c2e-8878-10c34b264872","Errors":[{"NextAction":"a38eef87-554a-4089-8183-3597f7073aaf","ErrorType":"InputTimeLimitExceeded"},{"NextAction":"a38eef87-554a-4089-8183-3597f7073aaf","ErrorType":"NoMatchingCondition"},{"NextAction":"08ec81c4-2220-4c2e-8878-10c34b264872","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"サンプルカンパニーお問い合わせ窓口です。ボットによる自動回答サービスを提供します。"},"Identifier":"969f43a5-3bb6-4251-943f-e8164f4e75c4","Type":"MessageParticipant","Transitions":{"NextAction":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","Errors":[{"NextAction":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","ErrorType":"NoMatchingError"}]}},{"Parameters":{"WisdomAssistantArn":"${QiCDomainArn}"},"Identifier":"aa5dff96-fa9e-47fd-b695-7ab159f40dab","Type":"CreateWisdomSession","Transitions":{"NextAction":"0e6b8c61-aeed-430c-9074-86cc1d1be3db","Errors":[{"NextAction":"969f43a5-3bb6-4251-943f-e8164f4e75c4","ErrorType":"NoMatchingError"}]}},{"Parameters":{"WisdomSessionArn":"$.Wisdom.SessionArn"},"Identifier":"0e6b8c61-aeed-430c-9074-86cc1d1be3db","Type":"UpdateContactData","Transitions":{"NextAction":"969f43a5-3bb6-4251-943f-e8164f4e75c4","Errors":[{"NextAction":"969f43a5-3bb6-4251-943f-e8164f4e75c4","ErrorType":"NoMatchingError"}]}},{"Parameters":{"FlowModuleId":"${FlowModuleArn}"},"Identifier":"bab192bc-747a-4a09-994e-da9975e0a395","Type":"InvokeFlowModule","Transitions":{"NextAction":"aa5dff96-fa9e-47fd-b695-7ab159f40dab","Errors":[{"NextAction":"aa5dff96-fa9e-47fd-b695-7ab159f40dab","ErrorType":"NoMatchingError"}]}}]}
+        - FlowModuleArn: !GetAtt ContactFlowModule1.ContactFlowModuleArn
+          FlowModuleName: !Sub '${FlowNamePrefix}_AC_PKG_init_flowModule'
+          AwsAccountId: !Ref AwsAccountId
+          LexBotId: !Ref LexBotId
+          LexBotName: !Ref LexBotName
+          QiCDomainArn: !Ref QiCDomainArn
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+  SelfServiceAgentContactFlow:
+    Type: 'AWS::Connect::ContactFlow'
+    DependsOn: ContactFlowModule1
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: !Sub '${FlowNamePrefix}_AC_PKG_self_service_to_agent_Inbound_flow'
+      Description: 'Self-service inbound flow with Lex Bot integration and agent escalation'
+      Type: 'CONTACT_FLOW'
+      Content: !Sub 
+        - |
+          {"Version":"2019-10-30","StartAction":"bab192bc-747a-4a09-994e-da9975e0a395","Metadata":{"entryPointPosition":{"x":-77.6,"y":30.4},"ActionMetadata":{"aa5dff96-fa9e-47fd-b695-7ab159f40dab":{"position":{"x":285.6,"y":88},"children":["90e60539-99a0-422a-b825-14661a7e4331"],"parameters":{"WisdomAssistantArn":{"displayName":"${QiCDomainArn}"}},"fragments":{"SetContactData":"90e60539-99a0-422a-b825-14661a7e4331"}},"90e60539-99a0-422a-b825-14661a7e4331":{"position":{"x":285.6,"y":88},"dynamicParams":[]},"bab192bc-747a-4a09-994e-da9975e0a395":{"position":{"x":48,"y":84},"parameters":{"FlowModuleId":{"displayName":"${FlowModuleName}"}},"contactFlowModuleName":"${FlowModuleName}"},"0a85f6dc-de90-4d4e-acb7-cc5c6d36a0ef":{"position":{"x":1326.4,"y":-96}},"d2733f7b-09c6-4669-8e92-b791f025c0ac":{"position":{"x":1576,"y":-96.8},"parameters":{"QueueId":{"displayName":"BasicQueue"}},"queue":{"text":"BasicQueue"}},"b0b38d0e-4c74-4708-ae85-9d90ab74f272":{"position":{"x":1827.2,"y":-88.8}},"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6":{"position":{"x":2117.6,"y":110.4}},"a38eef87-554a-4089-8183-3597f7073aaf":{"position":{"x":1823.2,"y":169.6}},"969f43a5-3bb6-4251-943f-e8164f4e75c4":{"position":{"x":527.2,"y":81.6}},"17af5c40-9c0d-4b71-a498-71a467d924f4":{"position":{"x":1081.6,"y":31.2},"conditions":[],"conditionMetadata":[{"id":"42b7982d-04a9-48c6-b6a0-8ba2d30a7423","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"COMPLETE"},{"id":"0c0e0a84-ddb1-492f-bc1c-d925bdbf8d2a","operator":{"name":"Equals","value":"Equals","shortDisplay":"="},"value":"HANDOFF"}]},"08ec81c4-2220-4c2e-8878-10c34b264872":{"position":{"x":1353.6,"y":372}},"f90d12f5-8a13-4266-90f5-32def7efca56":{"position":{"x":1579.2,"y":370.4}},"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f":{"position":{"x":791.2,"y":68.8},"parameters":{"LexV2Bot":{"AliasArn":{"displayName":"TestBotAlias","useLexBotDropdown":true,"lexV2BotName":"${LexBotName}"}},"LexTimeoutSeconds":{"Text":{"unit":60}}},"useLexBotDropdown":true,"lexV2BotName":"${LexBotName}","lexV2BotAliasName":"TestBotAlias","conditionMetadata":[]}},"Annotations":[]},"Actions":[{"Parameters":{"WisdomAssistantArn":"${QiCDomainArn}"},"Identifier":"aa5dff96-fa9e-47fd-b695-7ab159f40dab","Type":"CreateWisdomSession","Transitions":{"NextAction":"90e60539-99a0-422a-b825-14661a7e4331","Errors":[{"NextAction":"969f43a5-3bb6-4251-943f-e8164f4e75c4","ErrorType":"NoMatchingError"}]}},{"Parameters":{"WisdomSessionArn":"$.Wisdom.SessionArn"},"Identifier":"90e60539-99a0-422a-b825-14661a7e4331","Type":"UpdateContactData","Transitions":{"NextAction":"969f43a5-3bb6-4251-943f-e8164f4e75c4","Errors":[{"NextAction":"969f43a5-3bb6-4251-943f-e8164f4e75c4","ErrorType":"NoMatchingError"}]}},{"Parameters":{"FlowModuleId":"${FlowModuleArn}"},"Identifier":"bab192bc-747a-4a09-994e-da9975e0a395","Type":"InvokeFlowModule","Transitions":{"NextAction":"aa5dff96-fa9e-47fd-b695-7ab159f40dab","Errors":[{"NextAction":"aa5dff96-fa9e-47fd-b695-7ab159f40dab","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"エージェントへお繋ぎします。このままお待ち ください"},"Identifier":"0a85f6dc-de90-4d4e-acb7-cc5c6d36a0ef","Type":"MessageParticipant","Transitions":{"NextAction":"d2733f7b-09c6-4669-8e92-b791f025c0ac","Errors":[{"NextAction":"d2733f7b-09c6-4669-8e92-b791f025c0ac","ErrorType":"NoMatchingError"}]}},{"Parameters":{"QueueId":"${QueueArn}"},"Identifier":"d2733f7b-09c6-4669-8e92-b791f025c0ac","Type":"UpdateContactTargetQueue","Transitions":{"NextAction":"b0b38d0e-4c74-4708-ae85-9d90ab74f272","Errors":[{"NextAction":"b0b38d0e-4c74-4708-ae85-9d90ab74f272","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"b0b38d0e-4c74-4708-ae85-9d90ab74f272","Type":"TransferContactToQueue","Transitions":{"NextAction":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","Errors":[{"NextAction":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","ErrorType":"QueueAtCapacity"},{"NextAction":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","ErrorType":"NoMatchingError"}]}},{"Parameters":{},"Identifier":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","Type":"DisconnectParticipant","Transitions":{}},{"Parameters":{"Text":"お問い合わせ頂きありがとうございました。"},"Identifier":"a38eef87-554a-4089-8183-3597f7073aaf","Type":"MessageParticipant","Transitions":{"NextAction":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","Errors":[{"NextAction":"e2cf9a83-ac24-42cf-b9aa-4bd3e96c9cb6","ErrorType":"NoMatchingError"}]}},{"Parameters":{"Text":"サンプルカンパニーお問い合わせ窓口です。ボットによる自動回答サービスを提供します。"},"Identifier":"969f43a5-3bb6-4251-943f-e8164f4e75c4","Type":"MessageParticipant","Transitions":{"NextAction":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","Errors":[{"NextAction":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","ErrorType":"NoMatchingError"}]}},{"Parameters":{"ComparisonValue":"$.Lex.SessionAttributes.Tool"},"Identifier":"17af5c40-9c0d-4b71-a498-71a467d924f4","Type":"Compare","Transitions":{"NextAction":"08ec81c4-2220-4c2e-8878-10c34b264872","Conditions":[{"NextAction":"a38eef87-554a-4089-8183-3597f7073aaf","Condition":{"Operator":"Equals","Operands":["COMPLETE"]}},{"NextAction":"0a85f6dc-de90-4d4e-acb7-cc5c6d36a0ef","Condition":{"Operator":"Equals","Operands":["HANDOFF"]}}],"Errors":[{"NextAction":"08ec81c4-2220-4c2e-8878-10c34b264872","ErrorType":"NoMatchingCondition"}]}},{"Parameters":{"Text":"認識できませんでした。"},"Identifier":"08ec81c4-2220-4c2e-8878-10c34b264872","Type":"MessageParticipant","Transitions":{"NextAction":"f90d12f5-8a13-4266-90f5-32def7efca56","Errors":[{"NextAction":"f90d12f5-8a13-4266-90f5-32def7efca56","ErrorType":"NoMatchingError"}]}},{"Parameters":{"LoopCount":"2"},"Identifier":"f90d12f5-8a13-4266-90f5-32def7efca56","Type":"Loop","Transitions":{"NextAction":"a38eef87-554a-4089-8183-3597f7073aaf","Conditions":[{"NextAction":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","Condition":{"Operator":"Equals","Operands":["ContinueLooping"]}},{"NextAction":"a38eef87-554a-4089-8183-3597f7073aaf","Condition":{"Operator":"Equals","Operands":["DoneLooping"]}}]}},{"Parameters":{"Text":"Amazon Connect に関するご質問にお答え致します。では、どうぞ。","LexV2Bot":{"AliasArn":"arn:aws:lex:ap-northeast-1:${AwsAccountId}:bot-alias/${LexBotId}/TSTALIASID"},"LexTimeoutSeconds":{"Text":"60"}},"Identifier":"f5e1a722-9e79-4cc7-a1ab-8ad66d6ac55f","Type":"ConnectParticipantWithLexBot","Transitions":{"NextAction":"17af5c40-9c0d-4b71-a498-71a467d924f4","Errors":[{"NextAction":"08ec81c4-2220-4c2e-8878-10c34b264872","ErrorType":"InputTimeLimitExceeded"},{"NextAction":"17af5c40-9c0d-4b71-a498-71a467d924f4","ErrorType":"NoMatchingCondition"},{"NextAction":"17af5c40-9c0d-4b71-a498-71a467d924f4","ErrorType":"NoMatchingError"}]}}]}
+        - FlowModuleArn: !GetAtt ContactFlowModule1.ContactFlowModuleArn
+          FlowModuleName: !Sub '${FlowNamePrefix}_AC_PKG_init_flowModule'
+          AwsAccountId: !Ref AwsAccountId
+          LexBotId: !Ref LexBotId
+          LexBotName: !Ref LexBotName
+          QiCDomainArn: !Ref QiCDomainArn
+          QueueArn: !GetAtt ResourceLookup.QueueArn
+      Tags:
+        - Key: DeploymentInfo
+          Value: !FindInMap [DeploymentTags, Tags, DeploymentInfo]
+
+Outputs:
+  LambdaArn:
+    Description: 'ARN of the Resource Lookup Lambda function'
+    Value: !GetAtt ResourceLookupFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaArn'
+
+  MainContactFlowArn:
+    Description: 'ARN of the main contact flow'
+    Value: !GetAtt MainContactFlow.ContactFlowArn
+
+  SelfServiceContactFlowArn:
+    Description: 'ARN of the Lex contact flow'
+    Value: !GetAtt SelfServiceContactFlow.ContactFlowArn
+
+  SelfServiceAgentContactFlowArn:
+    Description: 'ARN of the Lex contact flow'
+    Value: !GetAtt SelfServiceAgentContactFlow.ContactFlowArn
+
+  CustomerQueueFlowArn:
+    Description: 'ARN of the customer queue flow'
+    Value: !GetAtt CustomerQueueFlow.ContactFlowArn
+
+  AgentWhisperFlowArn:
+    Description: 'ARN of the Agent Whisper flow'
+    Value: !GetAtt AgentWhisperFlow.ContactFlowArn
+
+  CustomerHoldFlowArn:
+    Description: 'ARN of the customer hold flow'
+    Value: !GetAtt CustomerHoldFlow.ContactFlowArn
+
+  AgentHoldFlowArn:
+    Description: 'ARN of the agent hold flow'
+    Value: !GetAtt AgentHoldFlow.ContactFlowArn
+
+  OutboundFlowArn:
+    Description: 'ARN of the outbound flow'
+    Value: !GetAtt OutboundFlow.ContactFlowArn
+
+  ContactFlowModule1Arn:
+    Description: 'ARN of the base contact flow module1'
+    Value: !GetAtt ContactFlowModule1.ContactFlowModuleArn
+    
+  HoldPromptId:
+    Description: 'ARN of the hold prompt'
+    Value: !GetAtt ResourceLookup.HoldPromptId
+
+  QueuePromptId:
+    Description: 'ARN of the queue prompt'
+    Value: !GetAtt ResourceLookup.QueuePromptId
+
+  QueueId:
+    Description: 'ARN of the queue'
+    Value: !GetAtt ResourceLookup.QueueArn
+
+  DLQueueUrl:
+    Description: 'URL of the Dead Letter Queue'
+    Value: !Ref DLQueue
+
+  DLQueueArn:
+    Description: 'ARN of the Dead Letter Queue'
+    Value: !GetAtt DLQueue.Arn

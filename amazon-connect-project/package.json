@@ -1,0 +1,38 @@
+{
+  "name": "amazon-connect-project",
+  "version": "1.1.1",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@babel/core": "7.27.1",
+    "@babel/preset-env": "7.27.2",
+    "@babel/preset-react": "7.27.1",
+    "babel-loader": "10.0.0",
+    "css-loader": "7.1.2",
+    "html-webpack-plugin": "5.6.3",
+    "style-loader": "4.0.0",
+    "webpack": "5.99.8",
+    "webpack-cli": "6.0.1",
+    "webpack-dev-server": "5.2.1"
+  },
+  "dependencies": {
+    "@amazon-connect/app": "1.0.6",
+    "@amazon-connect/contact": "1.0.6",
+    "@amazon-connect/theme": "1.0.6",
+    "@amazon-connect/voice": "1.0.6",
+    "@cloudscape-design/components": "3.0.964",
+    "@cloudscape-design/global-styles": "1.0.42",
+    "i18next": "25.3.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-i18next": "15.6.1"
+  }
+}

@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon Connect 3rd Party Application Integration'
+
+Parameters:
+  # S3/CloudFront Parameters
+  BucketNameApp:
+    Type: String
+    Description: Name of the S3 bucket containing the website files
+
+  BucketNameLogs:
+    Type: String
+    Description: Name of the S3 bucket containing the Log files
+
+  ProjectPath:
+    Type: String
+    Description: Project directory path in S3 bucket
+    Default: amazon-connect-project
+
+  PublicPath:
+    Type: String
+    Description: Public directory name
+    Default: public
+
+  Region:
+    Type: String
+    Description: The AWS Region where the S3 bucket is located
+    Default: ap-northeast-1
+    AllowedValues:
+      - ap-northeast-1
+      - ap-northeast-2
+      - ap-northeast-3
+      - ap-southeast-1
+      - ap-southeast-2
+      - us-east-1
+      - us-east-2
+      - us-west-1
+      - us-west-2
+      - eu-west-1
+      - eu-central-1
+
+  # Connect Parameters
+  ConnectInstanceArn:
+    Type: String
+    Description: 'The ARN of the Amazon Connect instance'
+    Default: 'arn:aws:connect:ap-northeast-1:111122223333:instance/xxxx'
+    AllowedPattern: '^arn:aws:connect:[a-z0-9-]+:[0-9]{12}:instance/[a-zA-Z0-9-]+$'
+
+  # Application Parameters
+  ApplicationName:
+    Type: String
+    Description: 'Name of the Connect 3rd Party Application'
+    Default: 'MyConnectApp'
+
+  SecurityProfileName:
+    Type: String
+    Description: 'Name of new security profile'
+    Default: 'CustomAgent'
+
+  WebAclArn:
+    Type: String
+    Description: ARN of the WAF Web ACL (must be created in us-east-1)
+    Default: 'arn:aws:wafv2:us-east-1:111122223333:global/webacl/myapp-webacl/xxxx'
+
+Resources:
+  # 1. CloudFront Resources
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-OAC
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Sub "${BucketNameApp}.s3.${Region}.amazonaws.com"
+            Id: S3Origin
+            OriginPath: !Sub "/${ProjectPath}/${PublicPath}"
+            S3OriginConfig: {}
+            OriginAccessControlId: !Ref CloudFrontOriginAccessControl
+        Enabled: true
+        DefaultRootObject: index.html
+        Logging:
+          Bucket: !Sub "${BucketNameLogs}.s3.amazonaws.com"
+          IncludeCookies: false
+          Prefix: "cloudfront/"
+        DefaultCacheBehavior:
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          TargetOriginId: S3Origin
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: https-only
+          MinTTL: 0
+          DefaultTTL: 0
+          MaxTTL: 0
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          MinimumProtocolVersion: TLSv1.2_2021
+          CloudFrontDefaultCertificate: true
+        WebACLId: !Ref WebAclArn
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketNameApp
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub "arn:aws:s3:::${BucketNameApp}/${ProjectPath}/${PublicPath}/*"
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
+
+  # 2. Connect Application
+  ConnectApplication:
+    Type: AWS::AppIntegrations::Application
+    DependsOn: CloudFrontDistribution
+    Properties:
+      Name: !Ref ApplicationName
+      Namespace: !Ref ApplicationName
+      Description: 'connect-custom-app for AgentWorkspace'
+      Permissions:
+        - "User.Status.Edit"
+        - "Contact.Details.Edit"
+        - "User.Details.View"
+        - "User.Configuration.View"
+        - "User.Status.View"
+        - "Contact.Details.View"
+        - "Contact.CustomerDetails.View"
+        - "Contact.Attributes.View"
+      ApplicationSourceConfig:
+        ExternalUrlConfig:
+          AccessUrl: !Sub "https://${CloudFrontDistribution.DomainName}/index.html"
+          ApprovedOrigins:
+            - !Sub 'https://${CloudFrontDistribution.DomainName}'
+
+  # 3. Connect Instance Configuration
+  ApprovedOrigin:
+    Type: AWS::Connect::ApprovedOrigin
+    DependsOn: ConnectApplication
+    Properties:
+      InstanceId: !Ref ConnectInstanceArn
+      Origin: !Sub 'https://${CloudFrontDistribution.DomainName}'
+
+  ApplicationAssociation:
+    Type: AWS::Connect::IntegrationAssociation
+    DependsOn: ApprovedOrigin
+    Properties:
+      InstanceId: !Ref ConnectInstanceArn
+      IntegrationType: APPLICATION
+      IntegrationArn: !GetAtt ConnectApplication.ApplicationArn
+
+  # 4. Security Profile
+  SecurityProfile:
+    Type: AWS::Connect::SecurityProfile
+    DependsOn: ApplicationAssociation
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      SecurityProfileName: !Ref SecurityProfileName
+      Description: 'Security profile with 3rd Party Application access'
+      Applications: 
+        - ApplicationPermissions:
+            - "ACCESS"
+          Namespace: !Ref ApplicationName
+      Permissions:
+        - "MyContacts.View"
+        - "ContactSearchWithCharacteristics.Access"
+        - "ContactSearchWithCharacteristics.View"
+        - "ContactSearchWithKeywords.Access"
+        - "ContactSearchWithKeywords.View"
+        - "ConfigureContactAttributes.View"
+        - "ContactAttributes.View"
+        - "GraphTrends.View"
+        - "ContactLensPostContactSummary.View"
+        - "ListenCallRecordings"
+        - "AutomatedVoiceInteraction.Recordings.Unredacted.Access"
+        - "AutomatedVoiceInteraction.Transcripts.Unredacted.Access"
+        - "CustomerProfiles.Create"
+        - "CustomerProfiles.Edit"
+        - "CustomerProfiles.View"
+        - "CaseHistory.View"
+        - "Cases.Create"
+        - "Cases.View"
+        - "Cases.Edit"
+        - "Wisdom.View"
+        - "CustomViews.Access"
+        - "BasicAgentAccess"
+        - "RealtimeContactLens.View"
+        - "OutboundCallAccess"
+        - "AudioDeviceSettings.Access"
+
+Outputs:
+  CloudFrontDomainName:
+    Description: 'Domain name of CloudFront distribution'
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  ApplicationId:
+    Description: 'The identifier of the created application'
+    Value: !Ref ConnectApplication
+
+  ApplicationArn:
+    Description: 'The ARN of the created application'
+    Value: !GetAtt ConnectApplication.ApplicationArn
+
+  AssociationId:
+    Description: 'The identifier of the integration association'
+    Value: !Ref ApplicationAssociation
+
+  SecurityProfileArn:
+    Description: 'The ARN of the security profile'
+    Value: !GetAtt SecurityProfile.SecurityProfileArn
+
+  SecurityProfileId:
+    Description: 'The ID of the security profile'
+    Value: !Ref SecurityProfile

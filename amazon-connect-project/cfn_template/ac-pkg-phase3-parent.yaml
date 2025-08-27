@@ -1,0 +1,186 @@
+# parent-stack.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Parent stack for Amazon Connect deployment'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Common Configuration"
+        Parameters:
+          - AwsAccountId
+          - Region
+      - Label:
+          default: "Connect Configuration"
+        Parameters:
+          - InstanceAlias
+          - ConnectInstanceArn
+          - CaseTemplateName
+          - CaseTemplateId
+      - Label:
+          default: "Q in Connect Configuration"
+        Parameters:
+          - QiCDomainArn
+          - LexBotName
+          - LexBotId
+      - Label:
+          default: "3rd Party Application Configuration"
+        Parameters:
+          - ApplicationName
+          - SecurityProfileName
+          - CloudFrontWebAclARN
+    ParameterLabels:
+      AwsAccountId:
+        default: "AWS Account ID"
+      Region:
+        default: "AWS Region"
+      InstanceAlias:
+        default: "Connect InstanceAlias"
+      ConnectInstanceArn:
+        default: "Connect Instance ARN"
+      CaseTemplateName:
+        default: "Case Template Name"
+      CaseTemplateId:
+        default: "Case Template ID"
+      QiCDomainArn:
+        default: "Q in Connect Assistant ARN"
+      LexBotName:
+        default: "Lex Bot Name"
+      LexBotId:
+        default: "Lex Bot ID"
+      ApplicationName:
+        default: "3rd Party Application Name"
+      SecurityProfileName:
+        default: "Security Profile Name"
+
+Parameters:
+  AwsAccountId:
+    Type: String
+    Description: 'AWS Account ID'
+
+  InstanceAlias:
+    Type: String
+    Description: 'The instance alias for the Amazon Connect instance'
+    MaxLength: 64
+    AllowedPattern: '^[a-z0-9-]+$'
+    ConstraintDescription: 'Instance alias can only contain lowercase letters, numbers, and hyphens.'
+
+  ConnectInstanceArn:
+    Type: String
+    Description: 'ARN of the Amazon Connect instance'
+    Default: 'arn:aws:connect:ap-northeast-1:xxxx:instance/xxxx'
+
+  QiCDomainArn:
+    Type: String
+    Description: 'The Assistant Arn of the Amazon Q(ARN of the QiC)'
+    Default: 'arn:aws:wisdom:ap-northeast-1:xxxx:assistant/xxxx'
+
+  CaseTemplateName:
+    Type: String
+    Description: 'Name of the case template'
+    Default: 'sample-case-template'
+
+  CaseTemplateId:
+    Type: String
+    Description: 'ID of the case template'
+
+  LexBotName:
+    Type: String
+    Description: 'Name of the Lex Bot'
+    Default: 'sample-lex-qic'
+
+  LexBotId:
+    Type: String
+    Description: 'ID of the Lex Bot'
+
+  # Application Parameters
+  ApplicationName:
+    Type: String
+    Description: 'Name of the Connect 3rd Party Application'
+    Default: 'MyConnectApp'
+
+  SecurityProfileName:
+    Type: String
+    Description: 'Name of new security profile'
+    Default: 'CustomAgent'
+
+  CloudFrontWebAclARN:
+    Type: String
+    Description: 'ARN of WebAcl'
+    Default: 'arn:aws:wafv2:us-east-1:xxxx:global/webacl/myapp-webacl/xxxx'
+
+  Region:
+    Type: String
+    Description: The AWS Region where the S3 bucket is located
+    Default: ap-northeast-1
+    AllowedValues:
+      - ap-northeast-1
+      - ap-northeast-2
+      - ap-northeast-3
+      - ap-southeast-1
+      - ap-southeast-2
+      - us-east-1
+      - us-east-2
+      - us-west-1
+      - us-west-2
+      - eu-west-1
+      - eu-central-1
+
+Resources:
+  # 1. Contact Flow Stack
+  ContactFlowStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://amazonconnect-${InstanceAlias}-app.s3.${AWS::Region}.amazonaws.com/amazon-connect-project/cfn_template/ac-pkg-phase3-contactflow-stack.yaml'
+      Parameters:
+        AwsAccountId: !Ref AwsAccountId
+        ConnectInstanceArn: !Ref ConnectInstanceArn
+        QiCDomainArn: !Ref QiCDomainArn
+        CaseTemplateName: !Ref CaseTemplateName
+        CaseTemplateId: !Ref CaseTemplateId
+        LexBotName: !Ref LexBotName
+        LexBotId: !Ref LexBotId
+        FlowNamePrefix: !Ref 'AWS::StackName'
+
+  # 2. QiC AI Agent Stack
+  QiCAIAgentStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: ContactFlowStack
+    Properties:
+      TemplateURL: !Sub 'https://amazonconnect-${InstanceAlias}-app.s3.${AWS::Region}.amazonaws.com/amazon-connect-project/cfn_template/ac-pkg-phase3-qic-stack.yaml'
+      Parameters:
+        AssistantId: !Select [1, !Split ['assistant/', !Ref QiCDomainArn]]  # AssistantIdを抽出
+        QicPrefix: !Ref 'AWS::StackName'
+
+  # 3. 3rd Party App Stack  
+  ThirdPartyAppStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: QiCAIAgentStack
+    Properties:
+      TemplateURL: !Sub 'https://amazonconnect-${InstanceAlias}-app.s3.${AWS::Region}.amazonaws.com/amazon-connect-project/cfn_template/ac-pkg-phase3-app-stack.yaml'
+      Parameters:
+        BucketNameApp: !Sub 'amazonconnect-${InstanceAlias}-app'
+        BucketNameLogs: !Sub 'amazonconnect-${InstanceAlias}-logs'
+        ProjectPath: 'amazon-connect-project'
+        PublicPath: 'public'
+        Region: !Ref Region
+        ConnectInstanceArn: !Ref ConnectInstanceArn
+        ApplicationName: !Ref ApplicationName
+        SecurityProfileName: !Ref SecurityProfileName
+        WebAclArn: !Ref CloudFrontWebAclARN
+
+Outputs:
+  ContactFlowStackId:
+    Value: !Ref ContactFlowStack
+
+  QiCAIAgentStackId:
+    Description: 'ID of the QiC AI Agent Stack'
+    Value: !Ref QiCAIAgentStack
+
+  ThirdPartyAppStackId:
+    Description: 'ID of the Third Party App Stack'
+    Value: !Ref ThirdPartyAppStack
+
+  StackName:
+    Description: 'Name of this stack'
+    Value: !Ref 'AWS::StackName'

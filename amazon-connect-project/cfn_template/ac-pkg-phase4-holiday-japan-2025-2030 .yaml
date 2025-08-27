@@ -1,0 +1,1509 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Amazon Connect Hours of Operation - Japan Public Holidays 2025-2030'
+
+Parameters:
+  ConnectInstanceArn:
+    Type: String
+    Description: 'Amazon Connect Instance ARN'
+    Default: 'arn:aws:connect:ap-northeast-1:xxxx:instance/xxxx'
+
+Resources:
+  PublicHoliday2025:
+    Type: 'AWS::Connect::HoursOfOperation'
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: 'Public Holiday 2025'
+      Description: 'Japanese Public Holidays 2025'
+      TimeZone: 'Asia/Tokyo'
+      Config:
+        - Day: MONDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: TUESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: WEDNESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: THURSDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: FRIDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SATURDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SUNDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+      HoursOfOperationOverrides: 
+        - EffectiveFrom: '2025-09-15'
+          EffectiveTill: '2025-09-15'
+          OverrideName: '敬老の日'
+          OverrideDescription: '敬老の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2025-09-23'
+          EffectiveTill: '2025-09-23'
+          OverrideName: '秋分の日'
+          OverrideDescription: '秋分の日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2025-10-13'
+          EffectiveTill: '2025-10-13'
+          OverrideName: 'スポーツの日'
+          OverrideDescription: 'スポーツの日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2025-11-03'
+          EffectiveTill: '2025-11-03'
+          OverrideName: '文化の日'
+          OverrideDescription: '文化の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2025-11-23'
+          EffectiveTill: '2025-11-23'
+          OverrideName: '勤労感謝の日'
+          OverrideDescription: '勤労感謝の日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2025-11-24'
+          EffectiveTill: '2025-11-24'
+          OverrideName: '勤労感謝の日 振替休日'
+          OverrideDescription: '勤労感謝の日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+
+  PublicHoliday2026:
+    Type: 'AWS::Connect::HoursOfOperation'
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: 'Public Holiday 2026'
+      Description: 'Japanese Public Holidays 2026'
+      TimeZone: 'Asia/Tokyo'
+      Config:
+        - Day: MONDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: TUESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: WEDNESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: THURSDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: FRIDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SATURDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SUNDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+      HoursOfOperationOverrides: 
+        - EffectiveFrom: '2026-01-01'
+          EffectiveTill: '2026-01-01'
+          OverrideName: '元日'
+          OverrideDescription: '元日'
+          OverrideConfig:
+            - Day: THURSDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-01-12'
+          EffectiveTill: '2026-01-12'
+          OverrideName: '成人の日'
+          OverrideDescription: '成人の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-02-11'
+          EffectiveTill: '2026-02-11'
+          OverrideName: '建国記念の日'
+          OverrideDescription: '建国記念の日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-02-23'
+          EffectiveTill: '2026-02-23'
+          OverrideName: '天皇誕生日'
+          OverrideDescription: '天皇誕生日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-03-20'
+          EffectiveTill: '2026-03-20'
+          OverrideName: '春分の日'
+          OverrideDescription: '春分の日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-04-29'
+          EffectiveTill: '2026-04-29'
+          OverrideName: '昭和の日'
+          OverrideDescription: '昭和の日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-05-03'
+          EffectiveTill: '2026-05-03'
+          OverrideName: '憲法記念日'
+          OverrideDescription: '憲法記念日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-05-04'
+          EffectiveTill: '2026-05-04'
+          OverrideName: 'みどりの日'
+          OverrideDescription: 'みどりの日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-05-05'
+          EffectiveTill: '2026-05-05'
+          OverrideName: 'こどもの日'
+          OverrideDescription: 'こどもの日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-05-06'
+          EffectiveTill: '2026-05-06'
+          OverrideName: 'みどりの日 振替休日'
+          OverrideDescription: 'みどりの日 振替休日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-07-20'
+          EffectiveTill: '2026-07-20'
+          OverrideName: '海の日'
+          OverrideDescription: '海の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-08-11'
+          EffectiveTill: '2026-08-11'
+          OverrideName: '山の日'
+          OverrideDescription: '山の日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-09-21'
+          EffectiveTill: '2026-09-21'
+          OverrideName: '敬老の日'
+          OverrideDescription: '敬老の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-09-23'
+          EffectiveTill: '2026-09-23'
+          OverrideName: '秋分の日'
+          OverrideDescription: '秋分の日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-10-12'
+          EffectiveTill: '2026-10-12'
+          OverrideName: 'スポーツの日'
+          OverrideDescription: 'スポーツの日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-11-03'
+          EffectiveTill: '2026-11-03'
+          OverrideName: '文化の日'
+          OverrideDescription: '文化の日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2026-11-23'
+          EffectiveTill: '2026-11-23'
+          OverrideName: '勤労感謝の日'
+          OverrideDescription: '勤労感謝の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+
+  PublicHoliday2027:
+    Type: 'AWS::Connect::HoursOfOperation'
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: 'Public Holiday 2027'
+      Description: 'Japanese Public Holidays 2027'
+      TimeZone: 'Asia/Tokyo'
+      Config:
+        - Day: MONDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: TUESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: WEDNESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: THURSDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: FRIDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SATURDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SUNDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+      HoursOfOperationOverrides: 
+        - EffectiveFrom: '2027-01-01'
+          EffectiveTill: '2027-01-01'
+          OverrideName: '元日'
+          OverrideDescription: '元日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-01-11'
+          EffectiveTill: '2027-01-11'
+          OverrideName: '成人の日'
+          OverrideDescription: '成人の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-02-11'
+          EffectiveTill: '2027-02-11'
+          OverrideName: '建国記念の日'
+          OverrideDescription: '建国記念の日'
+          OverrideConfig:
+            - Day: THURSDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-02-23'
+          EffectiveTill: '2027-02-23'
+          OverrideName: '天皇誕生日'
+          OverrideDescription: '天皇誕生日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-03-21'
+          EffectiveTill: '2027-03-21'
+          OverrideName: '春分の日'
+          OverrideDescription: '春分の日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-03-22'
+          EffectiveTill: '2027-03-22'
+          OverrideName: '春分の日 振替休日'
+          OverrideDescription: '春分の日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-04-29'
+          EffectiveTill: '2027-04-29'
+          OverrideName: '昭和の日'
+          OverrideDescription: '昭和の日'
+          OverrideConfig:
+            - Day: THURSDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-05-03'
+          EffectiveTill: '2027-05-03'
+          OverrideName: '憲法記念日'
+          OverrideDescription: '憲法記念日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-05-04'
+          EffectiveTill: '2027-05-04'
+          OverrideName: 'みどりの日'
+          OverrideDescription: 'みどりの日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-05-05'
+          EffectiveTill: '2027-05-05'
+          OverrideName: 'こどもの日'
+          OverrideDescription: 'こどもの日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-07-19'
+          EffectiveTill: '2027-07-19'
+          OverrideName: '海の日'
+          OverrideDescription: '海の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-08-11'
+          EffectiveTill: '2027-08-11'
+          OverrideName: '山の日'
+          OverrideDescription: '山の日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-09-20'
+          EffectiveTill: '2027-09-20'
+          OverrideName: '敬老の日'
+          OverrideDescription: '敬老の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-09-23'
+          EffectiveTill: '2027-09-23'
+          OverrideName: '秋分の日'
+          OverrideDescription: '秋分の日'
+          OverrideConfig:
+            - Day: THURSDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-10-11'
+          EffectiveTill: '2027-10-11'
+          OverrideName: 'スポーツの日'
+          OverrideDescription: 'スポーツの日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-11-03'
+          EffectiveTill: '2027-11-03'
+          OverrideName: '文化の日'
+          OverrideDescription: '文化の日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2027-11-23'
+          EffectiveTill: '2027-11-23'
+          OverrideName: '勤労感謝の日'
+          OverrideDescription: '勤労感謝の日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+
+  PublicHoliday2028:
+    Type: 'AWS::Connect::HoursOfOperation'
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: 'Public Holiday 2028'
+      Description: 'Japanese Public Holidays 2028'
+      TimeZone: 'Asia/Tokyo'
+      Config:
+        - Day: MONDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: TUESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: WEDNESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: THURSDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: FRIDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SATURDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SUNDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+      HoursOfOperationOverrides: 
+        - EffectiveFrom: '2028-01-01'
+          EffectiveTill: '2028-01-01'
+          OverrideName: '元日'
+          OverrideDescription: '元日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-01-10'
+          EffectiveTill: '2028-01-10'
+          OverrideName: '成人の日'
+          OverrideDescription: '成人の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-02-11'
+          EffectiveTill: '2028-02-11'
+          OverrideName: '建国記念の日'
+          OverrideDescription: '建国記念の日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-02-23'
+          EffectiveTill: '2028-02-23'
+          OverrideName: '天皇誕生日'
+          OverrideDescription: '天皇誕生日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-03-20'
+          EffectiveTill: '2028-03-20'
+          OverrideName: '春分の日'
+          OverrideDescription: '春分の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-04-29'
+          EffectiveTill: '2028-04-29'
+          OverrideName: '昭和の日'
+          OverrideDescription: '昭和の日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-05-03'
+          EffectiveTill: '2028-05-03'
+          OverrideName: '憲法記念日'
+          OverrideDescription: '憲法記念日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-05-04'
+          EffectiveTill: '2028-05-04'
+          OverrideName: 'みどりの日'
+          OverrideDescription: 'みどりの日'
+          OverrideConfig:
+            - Day: THURSDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-05-05'
+          EffectiveTill: '2028-05-05'
+          OverrideName: 'こどもの日'
+          OverrideDescription: 'こどもの日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-07-17'
+          EffectiveTill: '2028-07-17'
+          OverrideName: '海の日'
+          OverrideDescription: '海の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-08-11'
+          EffectiveTill: '2028-08-11'
+          OverrideName: '山の日'
+          OverrideDescription: '山の日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-09-18'
+          EffectiveTill: '2028-09-18'
+          OverrideName: '敬老の日'
+          OverrideDescription: '敬老の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-09-22'
+          EffectiveTill: '2028-09-22'
+          OverrideName: '秋分の日'
+          OverrideDescription: '秋分の日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-10-09'
+          EffectiveTill: '2028-10-09'
+          OverrideName: 'スポーツの日'
+          OverrideDescription: 'スポーツの日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-11-03'
+          EffectiveTill: '2028-11-03'
+          OverrideName: '文化の日'
+          OverrideDescription: '文化の日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2028-11-23'
+          EffectiveTill: '2028-11-23'
+          OverrideName: '勤労感謝の日'
+          OverrideDescription: '勤労感謝の日'
+          OverrideConfig:
+            - Day: THURSDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+
+  PublicHoliday2029:
+    Type: 'AWS::Connect::HoursOfOperation'
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: 'Public Holiday 2029'
+      Description: 'Japanese Public Holidays 2029'
+      TimeZone: 'Asia/Tokyo'
+      Config:
+        - Day: MONDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: TUESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: WEDNESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: THURSDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: FRIDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SATURDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SUNDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+      HoursOfOperationOverrides: 
+        - EffectiveFrom: '2029-01-01'
+          EffectiveTill: '2029-01-01'
+          OverrideName: '元日'
+          OverrideDescription: '元日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-01-08'
+          EffectiveTill: '2029-01-08'
+          OverrideName: '成人の日'
+          OverrideDescription: '成人の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-02-11'
+          EffectiveTill: '2029-02-11'
+          OverrideName: '建国記念の日'
+          OverrideDescription: '建国記念の日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-02-12'
+          EffectiveTill: '2029-02-12'
+          OverrideName: '建国記念の日 振替休日'
+          OverrideDescription: '建国記念の日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-02-23'
+          EffectiveTill: '2029-02-23'
+          OverrideName: '天皇誕生日'
+          OverrideDescription: '天皇誕生日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-03-20'
+          EffectiveTill: '2029-03-20'
+          OverrideName: '春分の日'
+          OverrideDescription: '春分の日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-04-29'
+          EffectiveTill: '2029-04-29'
+          OverrideName: '昭和の日'
+          OverrideDescription: '昭和の日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-04-30'
+          EffectiveTill: '2029-04-30'
+          OverrideName: '昭和の日 振替休日'
+          OverrideDescription: '昭和の日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-05-03'
+          EffectiveTill: '2029-05-03'
+          OverrideName: '憲法記念日'
+          OverrideDescription: '憲法記念日'
+          OverrideConfig:
+            - Day: THURSDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-05-04'
+          EffectiveTill: '2029-05-04'
+          OverrideName: 'みどりの日'
+          OverrideDescription: 'みどりの日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-05-05'
+          EffectiveTill: '2029-05-05'
+          OverrideName: 'こどもの日'
+          OverrideDescription: 'こどもの日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-07-16'
+          EffectiveTill: '2029-07-16'
+          OverrideName: '海の日'
+          OverrideDescription: '海の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-08-11'
+          EffectiveTill: '2029-08-11'
+          OverrideName: '山の日'
+          OverrideDescription: '山の日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-09-17'
+          EffectiveTill: '2029-09-17'
+          OverrideName: '敬老の日'
+          OverrideDescription: '敬老の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-09-23'
+          EffectiveTill: '2029-09-23'
+          OverrideName: '秋分の日'
+          OverrideDescription: '秋分の日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-09-24'
+          EffectiveTill: '2029-09-24'
+          OverrideName: '秋分の日 振替休日'
+          OverrideDescription: '秋分の日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-10-08'
+          EffectiveTill: '2029-10-08'
+          OverrideName: 'スポーツの日'
+          OverrideDescription: 'スポーツの日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-11-03'
+          EffectiveTill: '2029-11-03'
+          OverrideName: '文化の日'
+          OverrideDescription: '文化の日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2029-11-23'
+          EffectiveTill: '2029-11-23'
+          OverrideName: '勤労感謝の日'
+          OverrideDescription: '勤労感謝の日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+
+  PublicHoliday2030:
+    Type: 'AWS::Connect::HoursOfOperation'
+    Properties:
+      InstanceArn: !Ref ConnectInstanceArn
+      Name: 'Public Holiday 2030'
+      Description: 'Japanese Public Holidays 2030'
+      TimeZone: 'Asia/Tokyo'
+      Config:
+        - Day: MONDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: TUESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: WEDNESDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: THURSDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: FRIDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SATURDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+        - Day: SUNDAY
+          StartTime:
+            Hours: 0
+            Minutes: 0
+          EndTime:
+            Hours: 0
+            Minutes: 0
+      HoursOfOperationOverrides: 
+        - EffectiveFrom: '2030-01-01'
+          EffectiveTill: '2030-01-01'
+          OverrideName: '元日'
+          OverrideDescription: '元日'
+          OverrideConfig:
+            - Day: TUESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-01-14'
+          EffectiveTill: '2030-01-14'
+          OverrideName: '成人の日'
+          OverrideDescription: '成人の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-02-11'
+          EffectiveTill: '2030-02-11'
+          OverrideName: '建国記念の日'
+          OverrideDescription: '建国記念の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-02-23'
+          EffectiveTill: '2030-02-23'
+          OverrideName: '天皇誕生日'
+          OverrideDescription: '天皇誕生日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-03-20'
+          EffectiveTill: '2030-03-20'
+          OverrideName: '春分の日'
+          OverrideDescription: '春分の日'
+          OverrideConfig:
+            - Day: WEDNESDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-04-29'
+          EffectiveTill: '2030-04-29'
+          OverrideName: '昭和の日'
+          OverrideDescription: '昭和の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-05-03'
+          EffectiveTill: '2030-05-03'
+          OverrideName: '憲法記念日'
+          OverrideDescription: '憲法記念日'
+          OverrideConfig:
+            - Day: FRIDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-05-04'
+          EffectiveTill: '2030-05-04'
+          OverrideName: 'みどりの日'
+          OverrideDescription: 'みどりの日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-05-05'
+          EffectiveTill: '2030-05-05'
+          OverrideName: 'こどもの日'
+          OverrideDescription: 'こどもの日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-05-06'
+          EffectiveTill: '2030-05-06'
+          OverrideName: 'こどもの日 振替休日'
+          OverrideDescription: 'こどもの日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-07-15'
+          EffectiveTill: '2030-07-15'
+          OverrideName: '海の日'
+          OverrideDescription: '海の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-08-11'
+          EffectiveTill: '2030-08-11'
+          OverrideName: '山の日'
+          OverrideDescription: '山の日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-08-12'
+          EffectiveTill: '2030-08-12'
+          OverrideName: '山の日 振替休日'
+          OverrideDescription: '山の日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-09-16'
+          EffectiveTill: '2030-09-16'
+          OverrideName: '敬老の日'
+          OverrideDescription: '敬老の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-09-23'
+          EffectiveTill: '2030-09-23'
+          OverrideName: '秋分の日'
+          OverrideDescription: '秋分の日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-10-14'
+          EffectiveTill: '2030-10-14'
+          OverrideName: 'スポーツの日'
+          OverrideDescription: 'スポーツの日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-11-03'
+          EffectiveTill: '2030-11-03'
+          OverrideName: '文化の日'
+          OverrideDescription: '文化の日'
+          OverrideConfig:
+            - Day: SUNDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-11-04'
+          EffectiveTill: '2030-11-04'
+          OverrideName: '文化の日 振替休日'
+          OverrideDescription: '文化の日 振替休日'
+          OverrideConfig:
+            - Day: MONDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+        - EffectiveFrom: '2030-11-23'
+          EffectiveTill: '2030-11-23'
+          OverrideName: '勤労感謝の日'
+          OverrideDescription: '勤労感謝の日'
+          OverrideConfig:
+            - Day: SATURDAY
+              EndTime:
+                Hours: 0
+                Minutes: 0
+              StartTime:
+                Hours: 0
+                Minutes: 0
+
+Outputs:
+  HoursOfOperationId2026:
+    Description: 'Hours of Operation ID'
+    Value: !Ref PublicHoliday2026
+  HoursOfOperationId2027:
+    Description: 'Hours of Operation ID'
+    Value: !Ref PublicHoliday2027
+  HoursOfOperationId2028:
+    Description: 'Hours of Operation ID'
+    Value: !Ref PublicHoliday2028
+  HoursOfOperationId2029:
+    Description: 'Hours of Operation ID'
+    Value: !Ref PublicHoliday2029
+  HoursOfOperationId2030:
+    Description: 'Hours of Operation ID'
+    Value: !Ref PublicHoliday2030
+

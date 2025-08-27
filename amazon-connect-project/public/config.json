@@ -1,0 +1,26 @@
+{
+  "version": "1.0.0",
+  "contactSearchUrl": "https://sample-cc-hiroyou-20250820.my.connect.aws/contact-search",
+  "maxContactAttributes": 10,
+  "contactAttributes": {
+    "Key1": "電話番号",
+    "Key2": "予備",
+    "Key3": "予備",
+    "Key4": "予備",
+    "Key5": "予備",
+    "Key6": "予備",
+    "Key7": "予備",
+    "Key8": "予備",
+    "Key9": "予備",
+    "Key10": "予備"
+  },
+  "queueDisplayNames": {
+    "BasicQueue": "03-XXXX-XXXX（サンプル窓口）",
+    "BasicQueue1": "03-XXXX-XXXX",
+    "BasicQueue2": "03-XXXX-XXXX"
+  },
+  "countryCode": {
+    "日本 (+81)": "+81",
+    "米国 (+1)": "+1"
+  }
+}

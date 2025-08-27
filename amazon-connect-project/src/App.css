@@ -1,0 +1,182 @@
+/* ベースレイアウト */
+.app {
+  padding: 20px;
+  max-width: 100%;
+  margin: 0 auto;
+  min-height: 100vh;
+  background-color: var(--color-background-layout-main);
+  font-family: "Amazon Ember", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ヘッダーセクション */
+.header-container {
+  margin-bottom: 20px;
+}
+
+/* コンタクト情報セクション */
+.contact-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.info-label {
+  color: var(--color-text-body-secondary);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.info-value {
+  color: var(--color-text-body-default);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* タブナビゲーション */
+.tabs-container {
+  margin-top: 20px;
+}
+
+/* フォーム要素 */
+.form-field {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  color: var(--color-text-label);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+/* 電話番号入力セクション */
+.phone-number-container {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.country-code-select {
+  width: 140px !important;
+  min-width: 140px !important;
+}
+
+.phone-number-input {
+  flex: 1;
+}
+
+/* ステータスメッセージ */
+.status-message {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.status-message.error {
+  background-color: var(--color-background-status-error);
+  color: var(--color-text-status-error);
+  border: 1px solid var(--color-border-status-error);
+}
+
+.status-message.success {
+  background-color: var(--color-background-status-success);
+  color: var(--color-text-status-success);
+  border: 1px solid var(--color-border-status-success);
+}
+
+/* グリッドレイアウト調整 */
+.awsui-grid-container {
+  margin: 0 !important;
+}
+
+/* ボックススタイル */
+.info-box {
+  padding: 16px;
+  background-color: var(--color-background-container-content);
+  border: 1px solid var(--color-border-divider-default);
+  border-radius: 4px;
+}
+
+/* ボタンスタイル */
+.button-container {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* スペーシング変数 */
+:root {
+  --spacing-xs: 4px;
+  --spacing-s: 8px;
+  --spacing-m: 16px;
+  --spacing-l: 20px;
+  --spacing-xl: 24px;
+}
+
+/* レスポンシブデザイン */
+@media (max-width: 768px) {
+  .app {
+    padding: 12px;
+  }
+
+  .contact-info-grid {
+    grid-templatlate-columns: 1fr;
+  }
+
+  .phone-number-container {
+    flex-direction: column;
+  }
+
+  .country-code-select,
+  .phone-number-input {
+    width: 100% !important;
+  }
+
+  .button-container {
+    flex-direction: column;
+  }
+
+  .button-container button {
+    width: 100%;
+  }
+}
+
+/* アクセシビリティ改善 */
+:focus {
+  outline: 2px solid var(--color-border-item-focused);
+  outline-offset: 2px;
+}
+
+/* Cloudscapeコンポーネントのカスタマイズ */
+:root {
+  --font-family-base: "Amazon Ember", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --color-text-body-default: #16191f;
+  --color-background-container-content: #ffffff;
+  --color-border-divider-default: #e9ebed;
+}
+
+/* フォームレイアウトの調整 */
+.form-layout {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* セクション間のスペーシング */
+.section-spacing {
+  margin-bottom: var(--spacing-l);
+}
+
+/* アニメーション */
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

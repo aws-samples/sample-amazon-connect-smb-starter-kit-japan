@@ -31,11 +31,11 @@
 
 ## 解決可能な課題
 
-- 従来、コンタクトセンターシステムの導入には、複数のツールの統合や技術的な専門知識が必要とされ、多大な時間とコストが発生していました。特に、AI 機能の導入や CRM 連携には高度な技術力だけでなく実装に必要な期間もかかるため、特に中小規模のユーザーにとって大きな負担となっていました。これらの課題に対し、Amazon Connect に備わった各機能を利用開始するために必要な事前設定も自動化することで、利用者は初期設定済みの環境をもとに、すばやく Amazon Connect の利用を開始できます。
+- 従来、コンタクトセンターシステムの導入には、複数のツールの統合や技術的な専門知識が必要とされ、多大な時間とコストが発生していました。特に、AI 機能の導入や CRM 連携には高度な技術力だけでなく実装に必要な期間もかかるため、特に中小規模のユーザーにとって大きな負担となっていました。これらの課題に対し、Amazon Connect に備わった各機能を利用開始するために必要な事前設定も自動化することで、利用者は初期設定済みの環境をもとに、Amazon Connect の利用を開始できます。
 
 ## 主要機能/特徴
 
-- Amazon Connect にはコンタクトセンター運営に必要な主要機能が多く備わっています。本パッケージの利用により、コールフローに関しては、直収、セルフサービス(Lex と Amazon Q in Connect)のフローテンプレートが提供されます。各テンプレートには、会話の文字おこしなど応対品質の向上に役立つ Contact Lens の初期設定や、2025年、2026年の祝日カレンダーが組み込まれています。さらに、事前設定済みの Customer Profiles と Cases は、顧客データと応対履歴の管理機能の利用をすぐに可能です。また、エージェントが利用するエージェントワークスペース(ソフトフォン)を拡張する 3rd Party App(発信者ID番号選択、通話履歴、コール情報表示など)や、Amazon Q in Connect(エージェントアシスト)の初期設定も含まれます。
+- Amazon Connect にはコンタクトセンター運営に必要な主要機能が多く備わっています。本パッケージの利用により、コールフローに関しては、直収、セルフサービス(Lex と Amazon Q in Connect)のフローテンプレートが提供されます。各テンプレートには、会話の文字おこしなど応対品質の向上に役立つ Contact Lens の初期設定や、2025年～2030年の祝日カレンダーが組み込まれています。さらに、事前設定済みの Customer Profiles と Cases は、顧客データと応対履歴の管理機能の利用をすぐに可能です。また、エージェントが利用するエージェントワークスペース(ソフトフォン)を拡張する 3rd Party App(発信者ID番号選択、通話履歴、コール情報表示など)や、Amazon Q in Connect(エージェントアシスト)の初期設定も含まれます。
 
 ![CX_And_Built-in-AI](docs/images/FCD_BuiltInAI.jpg)
 
@@ -52,20 +52,24 @@
 
 ### 利用する AWS サービス
 - Amazon Connect
+- Amazon Lex
 - AWS Lambda
 - Amazon CloudFront
+- AWS WAF
 - Identity and Access Management (IAM)
 - Amazon S3
 - AWS CloudFormation
 
 ### デプロイされるリソース
 - Amazon Connect: Amazon Connect インスタンスが新規にデプロイされます。オプションで既存の Amazon Connect インスタンスを使用することも可能です。
-- Amazon S3: 以下の3つの S3 バケットが作成されます:
+- Amazon S3: 以下の4つの S3 バケットが作成されます:
   - amazonconnect-[InstanceAliace]: Amazon Connect のストレージ用バケットです。通話録音ファイル等が格納されます。
   - amazonconnect-[InstanceAliace]-app: 本パッケージの構成ファイルが保存され、また、エージェントワークスペースの拡張機能(MyConnectApp)の Web アプリケーションソース一式を格納します。
   - amazonconnect-[InstanceAliace]-qic: Amazon Q in Connect が参照するナレッジソースの格納先となるバケットです。
+  - amazonconnect-[InstanceAliace]-logs: S3 バケットのアクセスログ、Amazon CloudFront のアクセスログの格納先となるバケットです。
 - Amazon CloudFront: エージェントワークスペースの拡張機能（MyConnectApp）を配信するための CDN として使用します。
 - Amazon Lex: セルフサービスを提供するための音声ボットサービスです。Amazon Connect のコンタクトフローから連携され、ナレッジソース参照のため Amazon Q in Connect と連携します。
+- AWS Lambda: サンプルコンタクトフローをデプロイするためのリソース参照用の AWS Lambda です。AWS CloudFormation によるデプロイ時のみ利用します。本パッケージの動作では利用しません。
 
 ## 導入ガイド
 
@@ -92,7 +96,7 @@
 
 上から順に進み、手順を実施してください。
 
-1.  デプロイメントガイドをダウンロード:[**こちら**](docs/other_docs/AmazonConnectPackage_DeploymentGuide_20250822.pdf)
+1.  デプロイメントガイドをダウンロード:[**こちら**](docs/other_docs/AmazonConnectPackage_DeploymentGuide_20250827.pdf)
 1.  パラメーターシートをダウンロード:[**こちら**](docs/other_docs/AmazonConnectPackage_ParameterSheet.xlsx)
 1.  デプロイモジュールをダウンロード:[**こちら**](docs/other_docs/amazon-connect-project.zip)
 1.  デプロイメントガイドに従い作業を実施
@@ -126,7 +130,7 @@ Amazon Q in Connect が送受信するチャットメッセージ 1 件につき
 
 ## サポートとフィードバック
 - 本パッケージに関するフィードバックやご報告は、GitHub の Issues 機能をご利用ください。
-- Issues機能は、本リポジトリの 「Issues」タブにある「New Issues」ボタンから操作頂けます。
+- Issues 機能は、本リポジトリの 「Issues」タブにある「New Issues」ボタンから操作頂けます。
  
 ### 報告時のお願い
 - バグ報告の場合は、以下の情報を含めていただけると幸いです：

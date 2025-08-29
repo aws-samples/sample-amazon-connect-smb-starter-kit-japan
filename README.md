@@ -1,7 +1,7 @@
 # AI-Powered-AmazonConnect-Package2025
 
 ## バージョン情報
-**v1.0.0** (2025年7月)
+**v1.0.0** (2025年9月)
 - 初回リリース
 - 内容一覧
   - Amazon Connect Customer Profiles と Amazon Connect Cases を使用した着信ポップアップと応対履歴管理

@@ -1,4 +1,4 @@
-# AI-Powered-AmazonConnect-Package2025
+# sample-amazon-connect-smb-starter-kit-japan
 
 ## バージョン情報
 **v1.0.0** (2025年9月)
@@ -26,7 +26,7 @@
 
 ## 本パッケージについて
 
-- 本パッケージ(AI-Powered-AmazonConnect-Package)は、中小規模のコンタクトセンターを運営する企業向けに開発された、Amazon Connect の導入・デプロイを支援する統合ソリューションです。
+- 本パッケージ(sample-amazon-connect-smb-starter-kit-japan)は、中小規模のコンタクトセンターを運営する企業向けに開発された、Amazon Connect の導入・デプロイを支援する統合ソリューションです。
 - 本パッケージを導入することで、投資から価値創出までの時間を大幅に短縮し、ビジネスの成長を加速させることができます。シンプルな操作で高度な機能を実現し、効率的なコンタクトセンター運営を支援します。
 
 ## 解決可能な課題
@@ -122,7 +122,6 @@ Amazon Q in Connect が送受信するチャットメッセージ 1 件につき
 )の対象となる場合は、1 か月あたり 0.00 USD を支払うことになります。注: Amazon CloudFront は、静的なウェブページを使用してチャットとウェブ通話機能をデモンストレーションする目的でのみ使用されます。実稼働環境では、お客様はこの機能を既存のウェブサイトに実装します。
 
 ### その他の プライシングリソース
-- [AWS Pricing Calculator](https://calculator.aws/#/addService?refid=ap_card)
 - [Amazon Connect Pricing Page](https://aws.amazon.com/jp/connect/pricing/)
 - [AWS Optimization and Licensing Assessment](https://aws.amazon.com/jp/optimization-and-licensing-assessment/)
 
